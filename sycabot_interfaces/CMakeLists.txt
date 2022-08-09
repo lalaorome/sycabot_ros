@@ -14,6 +14,7 @@ find_package(rosidl_default_generators REQUIRED)
 
 set(srv_files
     "srv/BeaconSrv.srv"
+    "srv/Path.srv"
 )
 
 set(msg_files
