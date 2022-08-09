@@ -2,7 +2,7 @@ from logging import raiseExceptions
 import sys
 import time
 import numpy as np
-from sycabot_utils.utilities import *
+from sycabot_utils.utilities import quat2eul, p2vel
 import matplotlib.pyplot as plt
 from sklearn import linear_model
 import math as m

@@ -2,8 +2,7 @@ from logging import raiseExceptions
 import sys
 import time
 import numpy as np
-from sycabot_utils.utilities import utilities as ut
-
+from sycabot_utils.utilities import quat2eul
 import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionServer
@@ -74,7 +73,7 @@ class DeadzoneActionServer(Node):
         return :
         '''
         quat = [p.pose.orientation.x, p.pose.orientation.y, p.pose.orientation.z, p.pose.orientation.w]
-        theta = ut.quat2eul(quat)
+        theta = quat2eul(quat)
         self.rob_state = np.array([p.pose.position.x, p.pose.position.y, theta])
         self.time = float(p.header.stamp.sec) + float(p.header.stamp.nanosec)*10e-10
         return
