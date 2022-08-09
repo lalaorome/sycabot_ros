@@ -18,7 +18,7 @@ class DeadzoneActionClient(Node):
 
         self.Sycabot_id = self.get_parameter('SycaBot_id').value
         
-        self._action_client = ActionClient(self, Control, f'/SycaBot_W{self.Sycabot_id}/MPC_start_control')
+        self._action_client = ActionClient(self, Control, f'/SycaBot_W{self.Sycabot_id}/PPCtrller_start_control')
 
     def send_goal(self, order):
         goal_msg = Control.Goal()

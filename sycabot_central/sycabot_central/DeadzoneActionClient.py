@@ -13,9 +13,9 @@ class DeadzoneActionClient(Node):
     def __init__(self):
         super().__init__('deadzone_action_client')
 
-        self.declare_parameter('SycaBot_id', 1)
+        self.declare_parameter('id', 1)
 
-        self.Sycabot_id = self.get_parameter('Sycabot_id').value
+        self.Sycabot_id = self.get_parameter('id').value
         
         self._action_client = ActionClient(self, Deadzone, f'/SycaBot_W{self.Sycabot_id}/deadzones_identification')
 

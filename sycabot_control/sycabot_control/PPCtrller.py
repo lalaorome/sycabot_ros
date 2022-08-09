@@ -2,6 +2,7 @@ import sys
 import time
 from xml.dom import INDEX_SIZE_ERR
 import numpy as np
+import math as m
 
 from sycabot_control.CtrllerActionServer import CtrllerActionServer
 

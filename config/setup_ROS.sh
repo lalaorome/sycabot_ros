@@ -46,10 +46,8 @@ while :; do
             show_help    # Display a usage synopsis.
             ;;
         --pkg)
-            if [ "$2" ];then
-                echo "sourcing central_pc..."
-                source $PWD/install/local_setup.bash
-            fi
+            echo "sourcing central_pc..."
+            source $PWD/install/local_setup.bash
             ;;
         --srv)
             if [ "$2" ];then

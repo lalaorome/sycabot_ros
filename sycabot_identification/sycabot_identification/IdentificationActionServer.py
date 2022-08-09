@@ -5,6 +5,7 @@ import numpy as np
 from sycabot_utils.utilities import utilities as ut
 import matplotlib.pyplot as plt
 from sklearn import linear_model
+import math as m
 
 import rclpy
 from rclpy.node import Node
@@ -44,7 +45,7 @@ class IdentificationActionServer(Node):
         self.RIGHT_WHEEL = 0
         self.LEFT_WHEEL = 1
 
-        self.interpolate = False
+        self.interpolate = True
         # information variables
         self.times = []
         self.states = []
