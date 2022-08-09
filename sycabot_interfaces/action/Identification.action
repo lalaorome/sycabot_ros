@@ -1,0 +1,6 @@
+int32 n_inputs 2000
+string[] types # Available types are : 'ramp', 'random_sine_cosine', 'random_sine', 'step'
+---
+bool success
+---
+# Empty feedback

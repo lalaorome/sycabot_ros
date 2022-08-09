@@ -1,0 +1,24 @@
+rigid_bodies:
+  '1':
+    pose: SycaBot_W1/pose
+    pose2d: SycaBot_W1/ground_pose
+    child_frame_id: SycaBot_W1/base_link
+    parent_frame_id: world
+  
+  '2':
+    pose: SycaBot_W2/pose
+    pose2d: SycaBot_W2/ground_pose
+    child_frame_id: SycaBot_W2/base_link
+    parent_frame_id: world
+
+  '6':
+    pose: PointDefiner/pose
+    pose2d: PointDefiner/ground_pose
+    child_frame_id: PointDefiner/base_link
+    parent_frame_id: world
+
+optitrack_config:
+  enable_optitrack: true
+  multicast_address: 224.0.0.1 #Should be the same as the one in Motive
+  command_port: 1510 # Should be the same as the one in motive
+  data_port: 1511 #Should be the same as the one in motive

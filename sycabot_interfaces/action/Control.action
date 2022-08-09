@@ -1,0 +1,5 @@
+sycabot_interfaces/Pose2D[] path
+---
+bool success
+---
+# Empty feedback for now

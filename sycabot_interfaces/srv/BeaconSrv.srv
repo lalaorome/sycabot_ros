@@ -1,0 +1,4 @@
+---
+int16[] ids
+bool success
+string message 
