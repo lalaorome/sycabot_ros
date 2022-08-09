@@ -15,6 +15,7 @@ from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallb
 from rclpy.executors import MultiThreadedExecutor
 
 from sycabot_interfaces.action import Control
+from sycabot_interfaces.srv import Path
 from geometry_msgs.msg import Pose2D
 
 from acados_template import AcadosOcp, AcadosOcpSolver
@@ -42,11 +43,10 @@ class MPC(CtrllerActionServer):
         self.Tf = self.get_parameter('horizon').value
         self.expected_delay = self.get_parameter('delay').value
 
+        self.srv = self.create_service(Path, 'update_path', self.update_path_cb)
+
         self.ocp_solver = self.config_ocp()
         self.acados_integrator = self.config_delay_compensation_predictor()
-
-
-
 
     def control_cb(self, goal_handle):
         result = Control.Result()
@@ -296,7 +296,6 @@ class MPC(CtrllerActionServer):
         acados_integrator_delayCompensation = AcadosSimSolver(sim_delayCompensation)
         return acados_integrator_delayCompensation
 
-
     def add_time_to_wayposes(self, poses,t0,desired_speed,mode = 'ignore_corners'):
         LargeTime = 1000
         
@@ -450,6 +449,12 @@ class MPC(CtrllerActionServer):
         state_ref = np.vstack((x_pos_ref.reshape(1,N + 1), y_pos_ref.reshape(1,N + 1), theta_ref.reshape(1,N + 1)))
         input_ref = np.vstack((v_ref[:-1].reshape(1,N), omega_ref[:-1].reshape(1,N)))
         return state_ref, input_ref
+
+    def update_path_cb(self, request, response):
+        print("Non blocking")
+        response.success = True
+        return response
+
 def main(args=None):
     rclpy.init(args=args)
     executor = MultiThreadedExecutor()
