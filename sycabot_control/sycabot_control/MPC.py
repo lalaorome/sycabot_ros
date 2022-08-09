@@ -18,6 +18,7 @@ from sycabot_interfaces.action import Control
 from geometry_msgs.msg import Pose2D
 
 from acados_template import AcadosOcp, AcadosOcpSolver
+from acados_template import AcadosSim, AcadosSimSolver
 from acados_template import AcadosModel
 
 
@@ -25,12 +26,13 @@ class MPC(CtrllerActionServer):
     # https://blog.actorsfit.com/a?ID=01550-fd216bc6-e1d5-4d16-b901-143d2b19c430
     def __init__(self):
         super().__init__('MPC')
-        self.declare_parameter('Q', [1.,0.,0.,0.,1.,0.,0.,0.,0.2])
-        self.declare_parameter('R', [0.4,0.,0.,0.1])
+        self.declare_parameter('Q', [1.,0.,0.,0.,1.,0.,0.,0.,0.1])
+        self.declare_parameter('R', [0.5,0.,0.,0.1])
         self.declare_parameter('M', 10.)
         self.declare_parameter('radius_safeset', 4.)
         self.declare_parameter('timesteps', 20)
         self.declare_parameter('horizon', 2.)
+        self.declare_parameter('delay', 0.5)
 
         self.Q=self.get_parameter('Q').value
         self.R_mat=self.get_parameter('R').value
@@ -38,18 +40,21 @@ class MPC(CtrllerActionServer):
         self.sr = self.get_parameter('radius_safeset').value
         self.N = self.get_parameter('timesteps').value
         self.Tf = self.get_parameter('horizon').value
+        self.expected_delay = self.get_parameter('delay').value
 
         self.ocp_solver = self.config_ocp()
+        self.acados_integrator = self.config_delay_compensation_predictor()
 
 
     def control_cb(self, goal_handle):
         result = Control.Result()
 
         self.wait4pose()
-        mode = 'ignore_corners'
-        # mode = 'stop_in_corners'
+        # mode = 'ignore_corners'
+        mode = 'stop_in_corners'
 
-        t_sim = 0
+
+        t_run = 0
         init_pose = Pose2D()
         init_pose.x = self.rob_state[0]
         init_pose.y = self.rob_state[1]
@@ -57,17 +62,26 @@ class MPC(CtrllerActionServer):
         path = goal_handle.request.path
         path.insert(0,init_pose)
         print(path)
-        timed_path = self.add_time_to_wayposes(path, 0., 0.2, mode=mode)
+        # timed_path = self.add_time_to_wayposes(path, 0., 0.2, mode=mode)
+        
+        timed_poses = []
+        for p in path:
+            timed_poses = self.add_syncronised_waypose(timed_poses, 0., np.array([p[0],p[1]]), 15.)
+        print(timed_poses)
 
         # [state_plot, input_plot] = self.get_reference(0,0.1,200)
         
         # set cost
         ocp_solver = self.ocp_solver
+
+        acados_integrator = self.acados_integrator
         
         Ts_MPC = self.Tf / self.N
         t_init = time.time()
         x0 = self.rob_state
-        while t_sim < 100. :
+        x_pf = x0
+        u0 = np.zeros(2,)
+        while t_run < 100. :
 
             t_loop = time.time()
             # update initial condition
@@ -75,11 +89,22 @@ class MPC(CtrllerActionServer):
             x0 = self.rob_state
             x0[2] = np.arctan2(np.sin(x0[2] - previous_x0[2]),np.cos(x0[2] - previous_x0[2])) + previous_x0[2]
 
-            ocp_solver.set(0, "lbx", x0)
-            ocp_solver.set(0, "ubx", x0)
+            # predict state after estimated delay
+            t_prediction_feedback = time.time()
+            acados_integrator.set("x",x0)
+            acados_integrator.set("u",u0)
+            sim_status = acados_integrator.solve()             
+            x_simulated = acados_integrator.get("x") 
+            x_pf[0] = x_simulated[0]
+            x_pf[1] = x_simulated[1] 
+            thetanext_wind = np.arctan2(np.sin(x_simulated[2] - x_pf[2]), np.cos(x_simulated[2] - x_pf[2])) + x_pf[2]
+            x_pf[2] = thetanext_wind
+            
+            ocp_solver.set(0, "lbx", x_pf)
+            ocp_solver.set(0, "ubx", x_pf)
 
             # reference
-            [state_ref, input_ref] = self.generate_reference_trajectory_from_timed_wayposes(x0, timed_path, t_sim,Ts_MPC, self.N, mode=mode)
+            [state_ref, input_ref] = self.generate_reference_trajectory_from_timed_wayposes(x0, timed_path, t_run,Ts_MPC, self.N, mode='go_straight_or_turn')
 
             for k in range(self.N):
                 if k == 0:
@@ -101,8 +126,8 @@ class MPC(CtrllerActionServer):
             # get solution
             # x0 = ocp_solver.get(0, "x")
             u0 = ocp_solver.get(0, "u")
-            solver_time = time.time()
-            self.get_logger().info(f"Solver time is {solver_time-t_loop}s")
+            t_solver_finished = time.time()
+            self.get_logger().info(f"Solver time is {t_solver_finished - t_loop}s")
             # self.get_logger().info(f"Control input : {u0}")
             Vr,Vl = self.velocities2wheelinput(u0[0],u0[1])
             self.sendVelCmd(Vr,Vl)
@@ -111,10 +136,10 @@ class MPC(CtrllerActionServer):
             path_ref.y = state_ref[1,0]
             path_ref.theta = theta_ref_N
             self.viz_pathref_pub.publish(path_ref)
-            other_time = time.time()
-            time.sleep(max(Ts_MPC - solver_time - other_time,0))
-            self.get_logger().info(f"Other time is {other_time-t_loop}s")
-            t_sim = time.time() - t_init
+            t_publishing_finished = time.time()
+            time.sleep(max(Ts_MPC - (t_publishing_finished - t_loop),0))
+            self.get_logger().info(f"Publishing time is {t_publishing_finished - t_solver_finished}s")
+            t_run = time.time() - t_init
             # upred = np.zeros((nu,N))
             # xpred  = np.zeros((nx,N + 1))
             # for k in range(N):
@@ -262,6 +287,14 @@ class MPC(CtrllerActionServer):
         ocp_solver = AcadosOcpSolver(ocp, json_file = 'acados_ocp.json')
         return ocp_solver
 
+    def config_delay_compensation_predictor(self):
+        sim_delayCompensation = AcadosSim()
+        sim_delayCompensation.model = self.export_unicycle_ode_model_with_LocalConstraints()
+        sim_delayCompensation.solver_options.T = self.expected_delay
+        acados_integrator_delayCompensation = AcadosSimSolver(sim_delayCompensation)
+        return acados_integrator_delayCompensation
+
+
     def add_time_to_wayposes(self, poses,t0,desired_speed,mode = 'ignore_corners'):
         LargeTime = 1000
         
@@ -297,6 +330,49 @@ class MPC(CtrllerActionServer):
                 else:
                     timed_poses[2,i  * 2 + 1] = timed_poses[2,i  * 2]
                     timed_poses[3,i  * 2 + 1] = t0 + LargeTime             
+        return timed_poses
+
+    def add_syncronised_waypose(current_timed_poses,current_t,next_waypoint,next_travel_duration):
+        timed_poses = np.zeros((4,1))
+        timed_poses[0,0] = next_waypoint[0]
+        timed_poses[1,0] = next_waypoint[1]
+        timed_poses[2,0] = 0.
+        timed_poses[3,0] = current_t 
+        if np.any(current_timed_poses):
+            current_waypose_times = current_timed_poses[3,:]
+            idx_poses_after_t = np.argwhere(current_waypose_times > current_t)
+            if idx_poses_after_t.size > 0:
+                idx_next = idx_poses_after_t[0]
+                if idx_next > 1: #if there are more than one waypoint in list that have been passed
+                    reduced_timed_posed = current_timed_poses[:,idx_next - 1:]
+                else:
+                    reduced_timed_posed = current_timed_poses
+            else:
+                reduced_timed_posed = current_timed_poses
+
+            reduced_times = reduced_timed_posed[3,:]
+            W = len(reduced_times)    
+
+            rounds = 3
+
+            timed_poses = np.zeros((4,W + 2 + rounds * 4))
+            timed_poses[:,:W] = reduced_timed_posed
+            timed_poses[0,W] = reduced_timed_posed[0,-1]
+            timed_poses[1,W] = reduced_timed_posed[1,-1]
+            timed_poses[2,W] = np.arctan2(next_waypoint[1] - reduced_timed_posed[1,-1], next_waypoint[0] - reduced_timed_posed[0,-1])
+            timed_poses[3,W] = reduced_timed_posed[3,-1] + 1
+            timed_poses[0,W + 1] = next_waypoint[0]
+            timed_poses[1,W + 1] = next_waypoint[1]
+            timed_poses[2,W + 1] = timed_poses[2,W]
+            timed_poses[3,W + 1] = timed_poses[3,W] + next_travel_duration
+            
+
+            dir = np.sign(np.random.randn(1))
+            for ts in range(rounds * 4):
+                timed_poses[0,W + 2 + ts] = next_waypoint[0]
+                timed_poses[1,W + 2 + ts] = next_waypoint[1]
+                timed_poses[2,W + 2 + ts] = np.remainder(timed_poses[2,W + 2 + ts - 1] + dir * math.pi / 2 + math.pi,2 * math.pi) - math.pi
+                timed_poses[3,W + 2 + ts] = timed_poses[3,W + 2 + ts - 1] + 0.5  
         return timed_poses
 
     def generate_reference_trajectory_from_timed_wayposes(self, current_state, timed_poses,t,Ts,N,mode = 'ignore_corners'):
@@ -343,6 +419,31 @@ class MPC(CtrllerActionServer):
                             omega_ref[k] = np.arctan2(np.sin(timed_poses[2,idx_k] - timed_poses[2,idx_k - 1]),np.cos(timed_poses[2,idx_k] - timed_poses[2,idx_k - 1])) / (timed_poses[3,idx_k] - timed_poses[3,idx_k - 1])
                     else:
                         v_ref[k] = np.sqrt((timed_poses[1,idx_k] - timed_poses[1,idx_k - 1]) ** 2 + (timed_poses[0,idx_k] - timed_poses[0,idx_k - 1]) ** 2) / (timed_poses[3,idx_k] - timed_poses[3,idx_k - 1])
+        
+        if mode == 'go_straight_or_turn':
+            t_vec = t + np.linspace(0,N * Ts, N + 1)
+            for k in range(N + 1):
+                waypose_times = timed_poses[3,:]
+                idx_poses_after_t = np.argwhere(waypose_times > t_vec[k])
+                if idx_poses_after_t.size > 0:
+                    idx_k = idx_poses_after_t[0]
+                    if idx_k > 0:
+                        v_ref[k] = np.sqrt((timed_poses[1,idx_k] - timed_poses[1,idx_k - 1]) ** 2 + (timed_poses[0,idx_k] - timed_poses[0,idx_k - 1]) ** 2) / (timed_poses[3,idx_k] - timed_poses[3,idx_k - 1])
+                        if v_ref[k] != 0:
+                            l = (t_vec[k] - timed_poses[3,idx_k - 1]) / (timed_poses[3,idx_k] - timed_poses[3,idx_k - 1])
+                            theta_ref[k] = np.arctan2(timed_poses[1,idx_k] - timed_poses[1,idx_k - 1], timed_poses[0,idx_k] - timed_poses[0,idx_k - 1])
+                            x_pos_ref[k] = l * timed_poses[0,idx_k] + (1 - l) * timed_poses[0,idx_k - 1]
+                            y_pos_ref[k] = l * timed_poses[1,idx_k] + (1 - l) * timed_poses[1,idx_k - 1]
+                        else:
+                            x_pos_ref[k] = timed_poses[0,idx_k - 1]
+                            y_pos_ref[k] = timed_poses[1,idx_k - 1]
+                            l_rot = (t_vec[k] - timed_poses[3,idx_k - 1]) / (timed_poses[3,idx_k] - timed_poses[3,idx_k - 1])
+                            # print(l_rot)
+                            theta_ref[k]  = timed_poses[2,idx_k - 1] + l_rot *  np.arctan2(np.sin(timed_poses[2,idx_k] - timed_poses[2,idx_k - 1]),np.cos(timed_poses[2,idx_k] - timed_poses[2,idx_k - 1]))
+                            omega_ref[k] = np.arctan2(np.sin(timed_poses[2,idx_k] - timed_poses[2,idx_k - 1]),np.cos(timed_poses[2,idx_k] - timed_poses[2,idx_k - 1])) / (timed_poses[3,idx_k] - timed_poses[3,idx_k - 1])
+                    else:
+                        v_ref[k] = np.sqrt((timed_poses[1,idx_k] - timed_poses[1,idx_k - 1]) ** 2 + (timed_poses[0,idx_k] - timed_poses[0,idx_k - 1]) ** 2) / (timed_poses[3,idx_k] - timed_poses[3,idx_k - 1])
+
 
         state_ref = np.vstack((x_pos_ref.reshape(1,N + 1), y_pos_ref.reshape(1,N + 1), theta_ref.reshape(1,N + 1)))
         input_ref = np.vstack((v_ref[:-1].reshape(1,N), omega_ref[:-1].reshape(1,N)))
