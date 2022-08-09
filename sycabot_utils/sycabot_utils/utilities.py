@@ -102,6 +102,7 @@ def p2vel(p, Ts, n, vel_commands):
     velocities = np.zeros(2*(n-1))
     for i in range(0,2*(n-1),2) :
         idx = int(i/2)
+        print(Ts[idx])
         velocities[i] = np.sign(vel_commands[idx,0]+vel_commands[idx,1])*m.sqrt(((p[idx+1,0]-p[idx,0])**2 + (p[idx+1,1]-p[idx,1])**2))/Ts[idx] # v
         velocities[i+1] = (m.atan2(m.sin(p[idx+1,2]-p[idx,2]),m.cos(p[idx+1,2]-p[idx,2])))/Ts[idx] # w
     return velocities
