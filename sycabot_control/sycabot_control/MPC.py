@@ -64,9 +64,9 @@ class MPC(CtrllerActionServer):
         print(path)
         # timed_path = self.add_time_to_wayposes(path, 0., 0.2, mode=mode)
         
-        timed_poses = []
+        timed_path = []
         for p in path:
-            timed_path = self.add_syncronised_waypose(timed_poses, 0., np.array([p.x,p.y]), 15.)
+            timed_path = self.add_syncronised_waypose(timed_path, 0., np.array([p.x,p.y]), 15.)
         print(timed_path)
 
         # [state_plot, input_plot] = self.get_reference(0,0.1,200)
