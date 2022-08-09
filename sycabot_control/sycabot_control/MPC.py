@@ -32,7 +32,7 @@ class MPC(CtrllerActionServer):
         self.declare_parameter('radius_safeset', 4.)
         self.declare_parameter('timesteps', 20)
         self.declare_parameter('horizon', 2.)
-        self.declare_parameter('delay', 0.5)
+        self.declare_parameter('delay', 0.03)
 
         self.Q=self.get_parameter('Q').value
         self.R_mat=self.get_parameter('R').value
