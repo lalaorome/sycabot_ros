@@ -155,7 +155,7 @@ class IdentificationActionServer(Node):
 
             # Get velocity from measured inputs
             self.Ts_arr = [self.time_stamps[i+1]-self.time_stamps[i] for i in range(len(self.time_stamps)-1)]
-            vel_m = p2vel(self.states,self.Ts_arr,n_inputs, self.inputs)
+            vel_m = ut.p2vel(self.states,self.Ts_arr,n_inputs, self.inputs)
 
             f = linear_model.LinearRegression(fit_intercept=False)
             f.fit(model[:-2],vel_m)
