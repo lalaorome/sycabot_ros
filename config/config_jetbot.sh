@@ -138,15 +138,15 @@ cp -r ./. ../syca_ws/
 # Copy service file and make systemctl recgonize it
 # Set the boot file
 cd ../syca_ws
-sudo sed -i -r "s/ros2 launch jetbot [a-z]+/ros2 launch jetbot ${LAUNCH_FILE_NAME}/" boot_init.sh
+sudo sed -i -r "s/ros2 launch sycabot_launch [a-z]+/ros2 launch sycabot_launch ${LAUNCH_FILE_NAME}/" config/boot_init.sh
 echo ""
 echo ""
-cat boot_init.sh
+cat config/boot_init.sh
 echo ""
 echo ""
 echo 'Copying service and boot file...'
-sudo cp robot_boot.service /lib/systemd/system/
-sudo cp boot_init.sh /usr/local/bin/
+sudo cp config/robot_boot.service /lib/systemd/system/
+sudo cp config/boot_init.sh /usr/local/bin/
 echo 'chown /usr/local/bin/boot_init.sh'
 sudo chown root:root /usr/local/bin/boot_init.sh
 echo 'chmod 755 /usr/local/bin/boot_init.sh'
@@ -155,7 +155,7 @@ echo 'daemon reload'
 sudo systemctl daemon-reload
 
 # Change SYCABOT_ID number : https://www.geeksforgeeks.org/sed-command-in-linux-unix-with-examples/
-cd ../syca_ws/src/jetbot/launch
+cd ../syca_ws/sycabot_launch/launch
 sudo sed -i "s/SYCABOT_ID = ./SYCABOT_ID = ${ID}/" init.launch.py
 sudo sed -i "s/SYCABOT_ID = ./SYCABOT_ID = ${ID}/" motors.launch.py
 echo ""

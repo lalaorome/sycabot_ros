@@ -1,0 +1,8 @@
+[Unit]
+After=network.target
+Description="Robot boot up service"
+[Service]
+ExecStart=/usr/local/bin/boot_init.sh
+User=jetbot
+[Install]
+WantedBy=multi-user.target
