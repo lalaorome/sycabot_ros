@@ -6,7 +6,7 @@ class utilities:
     def __init__(self):
         pass
     
-    def quat2eul(q, axis='z'):
+    def quat2eul(self, q, axis='z'):
         '''
         Transform a quaternion to an euler angle.
 
@@ -48,7 +48,7 @@ class utilities:
 
         return not np.any(X[u[:],v[:]] > 0)
 
-    def generate_points(x_bound=2500, y_bound= 2500, r=71,k=30):
+    def generate_points(self, x_bound=2500, y_bound= 2500, r=71,k=30):
         ''' 
         generate points that are r distant from each other. R Waveshare bots is 0.25, so delta>0.707.
         x_bound,y_bound = extent of sample domain
@@ -79,7 +79,7 @@ class utilities:
             candidates = [(x,y) for x,y in candidates if x >= 0 and y >= 0 and x < x_bound and y < y_bound]
 
             for p in candidates:
-                if X[p] < 0 and lonely(p,X,r):
+                if X[p] < 0 and self.lonely(p,X,r):
                     X[p] = 1
                     active_list.append(p)
                     break
@@ -91,7 +91,7 @@ class utilities:
 
         return pts
 
-    def p2vel(p, Ts, n, vel_commands):
+    def p2vel(self, p, Ts, n, vel_commands):
         '''
         Transform measured positions to corresponding velocities
 
@@ -110,7 +110,7 @@ class utilities:
         return velocities
 
 
-    def vel2wheelinput(v,w, R=0.060325/2, L=0.1016) :
+    def vel2wheelinput(self, v,w, R=0.060325/2, L=0.1016) :
 
         max_rpm = 200
         left = v - w * L / 2.0
