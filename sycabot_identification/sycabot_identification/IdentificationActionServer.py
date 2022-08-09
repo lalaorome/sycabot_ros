@@ -39,7 +39,7 @@ class IdentificationActionServer(Node):
         self.R = self.get_parameter('wheel_radius').value
         self.L = self.get_parameter('L').value
 
-        self.rob_state = np.array([999.,0.,0.]) # x,y,theta: [-pi,pi]
+        self.rob_state = np.array([False,False,False]) # x,y,theta: [-pi,pi]
         self.time_init = time.time()
         self.time = 0.
         self.RIGHT_WHEEL = 0
@@ -105,10 +105,7 @@ class IdentificationActionServer(Node):
         self.time_stamps = []
         self.Ts_arr = []
 
-        # Initialisation : Wait for pose
-        while self.rob_state[0] == 999. :
-                time.sleep(0.1)
-                self.get_logger().info('No pose yet, waiting again...\n')
+        self.wait4pose()
 
         t_init = time.time()
         # Generate inputs for the identification
@@ -305,6 +302,13 @@ class IdentificationActionServer(Node):
 
         return right,left
 
+    def wait4pose(self):
+        # Initialisation : Wait for pose
+        while not np.all(self.rob_state) :
+                time.sleep(0.1)
+                self.get_logger().info('No pose yet, waiting again...\n')
+
+        return
 
 def main(args=None):
     rclpy.init(args=args)
