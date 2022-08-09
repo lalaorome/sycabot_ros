@@ -76,7 +76,7 @@ def generate_points(x_bound=2500, y_bound= 2500, r=71,k=30):
         candidates = [(x,y) for x,y in candidates if x >= 0 and y >= 0 and x < x_bound and y < y_bound]
 
         for p in candidates:
-            if X[p] < 0 and self.lonely(p,X,r):
+            if X[p] < 0 and lonely(p,X,r):
                 X[p] = 1
                 active_list.append(p)
                 break
@@ -98,7 +98,7 @@ def p2vel(p, Ts, n, vel_commands):
     return :
         vel (numpy array) [n,2] : corresponding velocities at each time step
     '''
-
+    print(Ts)
     velocities = np.zeros(2*(n-1))
     for i in range(0,2*(n-1),2) :
         idx = int(i/2)
