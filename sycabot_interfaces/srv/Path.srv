@@ -2,5 +2,3 @@ sycabot_interfaces/Pose2D[] path
 float64[] timestamps 
 ---
 bool success
----
-# Empty feedback for now
