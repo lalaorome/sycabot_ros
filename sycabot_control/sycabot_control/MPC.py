@@ -332,7 +332,7 @@ class MPC(CtrllerActionServer):
                     timed_poses[3,i  * 2 + 1] = t0 + LargeTime             
         return timed_poses
 
-    def add_syncronised_waypose(current_timed_poses,current_t,next_waypoint,next_travel_duration):
+    def add_syncronised_waypose(self, current_timed_poses,current_t,next_waypoint,next_travel_duration):
         timed_poses = np.zeros((4,1))
         timed_poses[0,0] = next_waypoint[0]
         timed_poses[1,0] = next_waypoint[1]
