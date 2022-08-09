@@ -2,7 +2,7 @@ from logging import raiseExceptions
 import sys
 import time
 import numpy as np
-from sycabot_utils import utilities as ut
+from sycabot_utils.utilities import *
 import matplotlib.pyplot as plt
 from sklearn import linear_model
 import math as m
@@ -81,7 +81,7 @@ class IdentificationActionServer(Node):
         return :
         '''
         quat = [p.pose.orientation.x, p.pose.orientation.y, p.pose.orientation.z, p.pose.orientation.w]
-        theta = ut.quat2eul(quat)
+        theta = quat2eul(quat)
         self.rob_state = np.array([p.pose.position.x, p.pose.position.y, theta])
         self.time = float(p.header.stamp.sec) + float(p.header.stamp.nanosec)*10e-10
         return
@@ -155,7 +155,7 @@ class IdentificationActionServer(Node):
 
             # Get velocity from measured inputs
             self.Ts_arr = [self.time_stamps[i+1]-self.time_stamps[i] for i in range(len(self.time_stamps)-1)]
-            vel_m = ut.p2vel(self.states,self.Ts_arr,n_inputs, self.inputs)
+            vel_m = p2vel(self.states,self.Ts_arr,n_inputs, self.inputs)
 
             f = linear_model.LinearRegression(fit_intercept=False)
             f.fit(model[:-2],vel_m)
