@@ -26,7 +26,7 @@ class MPC(CtrllerActionServer):
     # https://blog.actorsfit.com/a?ID=01550-fd216bc6-e1d5-4d16-b901-143d2b19c430
     def __init__(self):
         super().__init__('MPC')
-        self.declare_parameter('Q', [1.,0.,0.,0.,1.,0.,0.,0.,0.5])
+        self.declare_parameter('Q', [1.,0.,0.,0.,1.,0.,0.,0.,1])
         self.declare_parameter('R', [0.5,0.,0.,0.2])
         self.declare_parameter('M', 10.)
         self.declare_parameter('radius_safeset', 4.)
@@ -44,6 +44,8 @@ class MPC(CtrllerActionServer):
 
         self.ocp_solver = self.config_ocp()
         self.acados_integrator = self.config_delay_compensation_predictor()
+
+
 
 
     def control_cb(self, goal_handle):
@@ -66,7 +68,7 @@ class MPC(CtrllerActionServer):
         
         timed_path = []
         for p in path:
-            timed_path = self.add_syncronised_waypose(timed_path, 0., np.array([p.x,p.y]), 8.)
+            timed_path = self.add_syncronised_waypose(timed_path, 0., np.array([p.x,p.y]), 10.)
         print(timed_path)
 
         # [state_plot, input_plot] = self.get_reference(0,0.1,200)
@@ -81,7 +83,7 @@ class MPC(CtrllerActionServer):
         x0 = self.rob_state
         x_pf = x0
         u0 = np.zeros(2,)
-        while t_run < 100. :
+        while t_run < 150. :
 
             t_loop = time.time()
             # update initial condition
