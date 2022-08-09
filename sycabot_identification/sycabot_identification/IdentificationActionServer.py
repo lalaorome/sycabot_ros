@@ -140,6 +140,9 @@ class IdentificationActionServer(Node):
             tw = time.time()
             self.twait.append(tw- tp)
 
+            while(self.time_stamps[-1]==self.time):
+                time.sleep(0.01)
+
         # Stop the robot
         cmd_vel.left, cmd_vel.right = 0.,0.
         self.vel_cmd_pub.publish(cmd_vel)
