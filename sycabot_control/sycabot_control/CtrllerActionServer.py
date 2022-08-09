@@ -82,6 +82,7 @@ class CtrllerActionServer(Node):
         self.previous_state = self.rob_state
         self.rob_state = np.array([p.pose.position.x, p.pose.position.y, theta])
         self.time = float(p.header.stamp.sec) + float(p.header.stamp.nanosec)*10e-10
+        print(self.time)
         self.velocity = self.get_velocity()
         return
     
