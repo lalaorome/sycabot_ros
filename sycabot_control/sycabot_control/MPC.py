@@ -27,12 +27,12 @@ class MPC(CtrllerActionServer):
     def __init__(self):
         super().__init__('MPC')
         self.declare_parameter('Q', [1.,0.,0.,0.,1.,0.,0.,0.,0.1])
-        self.declare_parameter('R', [0.5,0.,0.,0.1])
+        self.declare_parameter('R', [0.2,0.,0.,0.1])
         self.declare_parameter('M', 10.)
         self.declare_parameter('radius_safeset', 4.)
         self.declare_parameter('timesteps', 20)
         self.declare_parameter('horizon', 2.)
-        self.declare_parameter('delay', 0.03)
+        self.declare_parameter('delay', 0.025)
 
         self.Q=self.get_parameter('Q').value
         self.R_mat=self.get_parameter('R').value
