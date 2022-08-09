@@ -166,4 +166,7 @@ echo ""
 cat motors.launch.py
 echo ""
 echo ""
+cat boot.launch.py
+echo ""
+echo ""
 cd ~/syca_ws
