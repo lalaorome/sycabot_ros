@@ -43,8 +43,6 @@ class MPC(CtrllerActionServer):
         self.Tf = self.get_parameter('horizon').value
         self.expected_delay = self.get_parameter('delay').value
 
-        self.srv = self.create_service(Path, 'update_path', self.update_path_cb)
-
         self.ocp_solver = self.config_ocp()
         self.acados_integrator = self.config_delay_compensation_predictor()
 
