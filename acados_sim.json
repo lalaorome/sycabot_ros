@@ -1,0 +1,43 @@
+{
+    "acados_include_path": "/home/sycamore/tmp/acados/include",
+    "acados_lib_path": "/home/sycamore/tmp/acados/lib",
+    "code_export_directory": "c_generated_code",
+    "cython_include_dirs": "",
+    "dims": {
+        "np": 2,
+        "nu": 2,
+        "nx": 3,
+        "nz": 0
+    },
+    "model": {
+        "dyn_disc_fun": null,
+        "dyn_disc_fun_jac": null,
+        "dyn_disc_fun_jac_hess": null,
+        "dyn_ext_fun_type": "casadi",
+        "dyn_generic_source": null,
+        "gnsf": {
+            "nontrivial_f_LO": 1,
+            "purely_linear": 0
+        },
+        "name": "unicycle_ode"
+    },
+    "parameter_values": [],
+    "problem_class": "SIM",
+    "shared_lib_ext": ".so",
+    "solver_options": {
+        "Tsim": 0.025,
+        "collocation_type": "GAUSS_LEGENDRE",
+        "ext_fun_compile_flags": "-O2",
+        "integrator_type": "ERK",
+        "output_z": false,
+        "sens_adj": false,
+        "sens_algebraic": false,
+        "sens_forw": true,
+        "sens_hess": false,
+        "sim_method_jac_reuse": 0,
+        "sim_method_newton_iter": 3,
+        "sim_method_newton_tol": 0.0,
+        "sim_method_num_stages": 1,
+        "sim_method_num_steps": 1
+    }
+}

@@ -67,7 +67,7 @@ class MPC(CtrllerActionServer):
         wayposes, wayposes_times = [],[]
         for p in path:
             wayposes, wayposes_times = self.add_syncronised_waypose(wayposes, wayposes_times, 0., np.array([p.x,p.y]), 10.)
-        print(wayposes, wayposes_times)
+            print(wayposes, wayposes_times)
 
         # [state_plot, input_plot] = self.get_reference(0,0.1,200)
         
@@ -336,7 +336,7 @@ class MPC(CtrllerActionServer):
         new_poses = np.zeros((3,1))
         new_poses[:2,0] = next_waypoint[:2]
         new_poses[2] = 0.
-        new_times = current_t
+        new_times = np.array([current_t])
         if np.any(current_poses):
             idx_poses_after_t = np.argwhere(current_waypose_times > current_t)
             if idx_poses_after_t.size > 0:
@@ -357,12 +357,13 @@ class MPC(CtrllerActionServer):
 
             new_poses = np.zeros((3,W + 2 + rounds * 4))
             new_times = np.zeros(W + 2 + rounds * 4)
+            print(new_times, new_poses)
             new_poses[:,:W] = reduced_poses
             new_times[:W] = reduced_times
             new_poses[0,W] = reduced_poses[0,-1]
             new_poses[1,W] = reduced_poses[1,-1]
             new_poses[2,W] = np.arctan2(next_waypoint[1] - reduced_poses[1,-1], next_waypoint[0] - reduced_poses[0,-1])
-            new_times[3,W] = reduced_times[3,-1] + 1
+            new_times[W] = reduced_times[-1] + 1
             new_poses[0,W + 1] = next_waypoint[0]
             new_poses[1,W + 1] = next_waypoint[1]
             new_poses[2,W + 1] = new_poses[2,W]
