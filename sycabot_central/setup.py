@@ -24,6 +24,7 @@ setup(
             'identification = sycabot_central.IdentificationActionClient:main',
             'MPCcontrol = sycabot_central.MPCActionClient:main',
             'gamepad = sycabot_central.GamepadActionServer:main',
+            'beacon = sycabot_central.beacon:main',
         ],
     },
 )

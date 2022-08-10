@@ -21,7 +21,7 @@ setup(
     entry_points={
         'console_scripts': [
             'motors = sycabot_base.motors_waveshare:main',
-            'advertise_id = sycabot_base.beaconclient:main'
+            'advertise_id = sycabot_base.beaconClient:main'
         ],
     },
 )

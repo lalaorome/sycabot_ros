@@ -5,6 +5,7 @@ from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallb
 from sycabot_interfaces.msg import BeaconMsg
 from sycabot_interfaces.srv import BeaconSrv
 from std_srvs.srv import Trigger
+from rclpy.executors import MultiThreadedExecutor
 
 import numpy as np
 import math as m
@@ -20,11 +21,11 @@ class beacon(Node):
         super().__init__('beacon')
         self.ids = []
         self.prev_count = 0
-        beacon_cb_group = ReentrantCallbackGroup()
-        self.beacon_sub = self.create_subscription(BeaconMsg, '/beacon',  self.get_jetbot_ids_cb, 10, callback_group = beacon_cb_group)
+        cb_group = ReentrantCallbackGroup()
+        self.beacon_sub = self.create_subscription(BeaconMsg, 'beacon',  self.get_jetbot_ids_cb, 10, callback_group = cb_group)
         self.send_ids_srv = self.create_service(BeaconSrv, 'get_list_ids', self.send_ids_cb)
         self.refresh_ids = self.create_service(Trigger, 'refresh_list_ids', self.refresh_cb)
-        self.check_updated = self.create_timer(0.1, self.check_updated_cb)
+        self.check_updated = self.create_timer(0.1, self.check_updated_cb, callback_group = cb_group)
     
     def get_jetbot_ids_cb(self, msg):
         if msg.id not in self.ids :
@@ -41,6 +42,7 @@ class beacon(Node):
         if self.updated :
             response.success = True
             response.ids = self.ids
+            print(self.ids)
         else :
             response.success = False
             response.message = 'Not yet udpated. Try to refresh.'
@@ -53,8 +55,17 @@ class beacon(Node):
 
 def main(args=None):
     rclpy.init(args=args)
+    executor = MultiThreadedExecutor()
     node = beacon()
-    rclpy.spin(node)
+    executor.add_node(node)
+    try :
+        executor.spin()
+    except Exception as e :
+        print(e)
+    finally:
+        executor.shutdown()
+        node.destroy_node()
+    return
 
 if __name__ == '__main__':
     main()

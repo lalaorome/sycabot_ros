@@ -152,7 +152,6 @@ class MPCActionClient(Node):
                 new_times[W + 2 + ts] = new_times[W + 2 + ts - 1] + 0.5
         
         return new_poses, new_times
-
     def wait4pose(self):
         # Initialisation : Wait for pose
         while not np.all(self.rob_state) :

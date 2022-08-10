@@ -1,237 +1,197 @@
+from asyncio import futures
 import rclpy
 from rclpy.node import Node
-from rclpy.action import ActionClient
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
+from message_filters import ApproximateTimeSynchronizer, Subscriber
 
-from sycabot_interfaces.msg import Pose2D
-from sycabot_interfaces.action import Control
-from geometry_msgs.msg import PoseStamped
 from sycabot_utils.utilities import quat2eul
 
 import numpy as np
-import time
+from numpy.linalg import norm
+from scipy.optimize import linear_sum_assignment, minimize
 import math as m
+import time
+import sys
+
+from std_srvs.srv import Trigger
+from sycabot_interfaces.srv import BeaconSrv, Task
+from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import Point
 
 class cCAPT(Node):
-
+    MAX_LIN_VEL = 0.3
     def __init__(self):
-        super().__init__('control_action_client')
+        super().__init__("cCAPT_pathplanner")
 
-        self.declare_parameter('SycaBot_id', 1)
+        self.initialised = False
+        self.jb_positions = None
+        self.OptiTrack_sub = []
+        self.ids = None
+        self.goals = None
+
         cb_group = ReentrantCallbackGroup()
-        self.Sycabot_id = self.get_parameter('SycaBot_id').value
+
+        # Define get ids service client
+        self.get_ids_cli = self.create_client(BeaconSrv, 'get_list_ids')
+        while not self.get_ids_cli.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('Get ids service not available, waiting again...\n')
         
-        self._action_client = ActionClient(self, Control, f'/SycaBot_W{self.Sycabot_id}/MPC_start_control', callback_group=cb_group)
+        # Define get ids service client
+        self.refresh_ids_cli = self.create_client(Trigger, 'refresh_list_ids')
+        while not self.refresh_ids_cli.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('Refresh ids service not available, waiting again...\n')
+        
+        # Create service for task request
+        self.task_srv = self.create_service(Task, 'task_srv', self.set_task_cb, callback_group = cb_group)
 
-        # Subscribe to pose topic
-        self.pose_sub = self.create_subscription(PoseStamped, f'/mocap_node/SycaBot_W{self.Sycabot_id}/pose', self.get_pose_cb, 1, callback_group=cb_group)
-
-        self.rob_state = np.array([False,False,False]) # x,y,theta: [-pi,pi]
-        self.velocity = np.array([0.,0.])
-        self.previous_state  = np.array([0.,0.,0.])
-        self.start = False
-
-    def get_pose_cb(self, p):
+    async def set_task_cb(self, request, response):
         '''
-        Get jetbot positions.
+        Compute goals if it has never been init and give it to the asking jetbot.
 
         arguments :
-            p (PoseStamped) = position of the jetbots
+            request (interfaces.srv/Start.Response) =
+                id (int64) = identifier of the jetbot [1,2,3,...]
+                position (Pose) = pose of the jetbot
+        ------------------------------------------------
+        return :
+            response (interfaces.srv/Task.Response) = 
+                task (geometry_msgs.msg/Pose) = pose of the assigned task
+        '''
+        if not self.initialised :
+            await self.get_ids()
+            self.initialise_pose_acquisition()
+            while self.jb_positions is None :
+                time.sleep(0.1)
+                self.get_logger().info("Waiting for positions...")
+
+            good_goals = False
+            N = len(self.ids)
+            D=np.zeros((N,N))
+            
+            for k in range(0,100000) :
+                goals = np.random.rand(len(self.ids),2)
+                goals[:,0] = goals[:,0]*4 - 2.
+                goals[:,1] = goals[:,1]*6 - 3.
+
+                for i in range(N):
+                    for j in range(N):
+                        D[i,j] = norm(goals[i] - goals[j])
+                        if i==j : D[i,j] = 900.
+
+                if np.all(D>0.4) : 
+                    for i in range(N):
+                        for j in range(N):
+                            D[i,j] = norm(self.jb_positions[i,0:2] - goals[j])
+                        
+                    if np.all(D>2.):
+                        good_goals = True
+                        break
+                    else : self.goals = goals
+            if not good_goals : 
+                sys.exit()
+            self.cCAPT(vmax = self.MAX_LIN_VEL, t0=0.)
+
+        # Step 2 : Compute and send response if id is the good one
+        task = Point()
+        vlin = 0.
+        self.get_logger().info('got request from %d\n'%(request.id))
+
+        
+        task.x = self.goals[request.id-1,0]
+        task.y = self.goals[request.id-1,1]
+        task.z = 0.
+
+        response.task = task
+
+        return response
+        
+
+    async def get_ids(self):
+        get_ids_req = BeaconSrv.Request()
+        future = self.get_ids_cli.call_async(get_ids_req)
+        try :
+            get_ids = await future
+        except Exception as e:
+            self.get_logger().info('Get ids service call failed %r' % (e,))
+
+        if not get_ids.success :
+            self.get_logger().info(f'{get_ids.message}')
+            refresh_req = Trigger.Request()
+            future = self.refresh_ids_cli.call_async(refresh_req)
+            try :
+                result = await future
+            except Exception as e:
+                self.get_logger().info('Refresh ids service call failed %r' % (e,))
+            else :
+                get_ids_req = BeaconSrv.Request()
+                future = self.get_ids_cli.call_async(get_ids_req)
+                try :
+                    result = await future
+                except Exception as e:
+                    self.get_logger().info('Get ids service call failed %r' % (e,))
+                else :
+                    self.ids = result.ids
+        else : 
+            self.ids = np.array(get_ids.ids)
+        return
+
+    def cCAPT(self, vmax=1., t0=0):
+        '''
+        Task assignment algorithm. c-CAPT algo adapted from the work of M. Turpin : https://journals.sagepub.com/doi/full/10.1177/0278364913515307
+        Algorithm developped for the case where M = N and cost function is difference of velocities squared.
+
+        arguments :
+            vmax (float) = max speed of the robot [m/s]
+            t0   (float) = initial starting time [s]
         ------------------------------------------------
         return :
         '''
-        quat = [p.pose.orientation.x, p.pose.orientation.y, p.pose.orientation.z, p.pose.orientation.w]
+        # Step 1 : initialise varibales N,M, D and phi
+        N,M = self.jb_positions.shape[0], self.goals.shape[0]
+        D=np.zeros((N,M))
+        phi=np.zeros((N,M))
+        
+        # Step 2 : Compute cost matrix for each position and goal
+        for i in range(N):
+            for j in range(M):
+                D[i,j] = norm(self.jb_positions[i,0:2] - self.goals[j])**2
+        
+        # Step 3 : Compute phi_star using a simple optimizer
+        row_idx, col_idx = linear_sum_assignment(D)
+        phi[row_idx, col_idx] = 1
+        tf = round(max(norm(self.jb_positions[:,0:2] - self.goals[col_idx], axis=1))/vmax)
+
+
+        # Step 4 : Compute trajectory and the task where goals[i] corresponds to jebtot[i]
+        self.goals = phi@self.goals
+        
+        return
+    
+    def initialise_pose_acquisition(self):
+        # Create sync callback group to get all the poses
+        for id in self.ids:
+            self.OptiTrack_sub.append(Subscriber(self, PoseStamped, f"/mocap_node/SycaBot_W{id}/pose"))
+        self.ts = ApproximateTimeSynchronizer(self.OptiTrack_sub, queue_size=10, slop = 0.1)
+        self.ts.registerCallback(self.get_jb_pose_cb)
+
+    def get_jb_pose_cb(self, *poses):
+        '''
+        Get and gather jetbot positions.
+        arguments :
+            *poses (PoseStamped) = array containing the position of the jetbots
+        ------------------------------------------------
+        return :
+        '''
+        quat = [poses[0].pose.orientation.x, poses[0].pose.orientation.y, poses[0].pose.orientation.z, poses[0].pose.orientation.w]
         theta = quat2eul(quat)
-        self.previous_state = self.rob_state
-        self.rob_state = np.array([p.pose.position.x, p.pose.position.y, theta])
-        self.time = float(p.header.stamp.sec) + float(p.header.stamp.nanosec)*10e-10
-        if not self.start :
-            self.send_goal()
-            self.start = True
-            print(self.start)
-        return
-
-    def send_goal(self):
-        self.wait4pose()
-        goal_msg = Control.Goal()
-        self._action_client.wait_for_server()
-
-        init_pose = Pose2D()
-        init_pose.x = self.rob_state[0]
-        init_pose.y = self.rob_state[1]
-        init_pose.theta = self.rob_state[2]
-        path = self.create_tajectory_randpoints()
-        path.insert(0,init_pose)
-
-        wayposes, wayposes_times = [],[]
-        for p in path:
-            wayposes, wayposes_times = self.add_syncronised_waypose(wayposes, wayposes_times, 0., np.array([p.x,p.y]), 10.)
-        # print(wayposes, wayposes_times)
-        path = []
-        for i in range(len(wayposes_times)):
-            pose = Pose2D()
-            pose.x = wayposes[0,i]
-            pose.y = wayposes[1,i]
-            pose.theta = wayposes[2,i]
-            path.append(pose)
-        goal_msg.path = path
-        goal_msg.timestamps = wayposes_times.tolist()
-        self._send_goal_future = self._action_client.send_goal_async(goal_msg)
-        self._send_goal_future.add_done_callback(self.goal_response_callback)
-
-    def goal_response_callback(self, future):
-        goal_handle = future.result()
-        if not goal_handle.accepted:
-            self.get_logger().info('Goal rejected :(')
-            return
-
-        self.get_logger().info('Goal accepted :)')
-
-        self._get_result_future = goal_handle.get_result_async()
-        self._get_result_future.add_done_callback(self.get_result_callback)
-
-    def get_result_callback(self, future):
-        result = future.result().result
-        self.get_logger().info('Result: {0}'.format(result.success))
-        rclpy.shutdown()
-
-    def create_tajectory_randpoints(self):
-        poses = []
-        points = [[0.,0.],[-1.352, -0.840], [-0.088,1.409],[1.306,-0.948],[0.869,2.150],[-1.155,2.208],[-0.067,-1.547],[0.,-0.4],[0.3,0.],[0.,0.]]
-        for p in points :
-            pose = Pose2D()
-            pose.x = p[0]
-            pose.y = p[1]
-            poses.append(pose)
-        return poses
-
-    def add_syncronised_waypose(self, current_poses, current_waypose_times, current_t,next_waypoint,next_travel_duration):
-        
-        new_poses = np.zeros((3,1))
-        new_poses[:2,0] = next_waypoint[:2]
-        new_poses[2] = 0.
-        new_times = np.array([current_t])
-        if np.any(current_poses):
-            idx_poses_after_t = np.argwhere(current_waypose_times > current_t)
-            if idx_poses_after_t.size > 0:
-                idx_next = idx_poses_after_t[0]
-                if idx_next > 1: #if there are more than one waypoint in list that have been passed
-                    reduced_poses = current_poses[:,idx_next - 1:]
-                    reduced_times = current_waypose_times[idx_next - 1:]
-                else:
-                    reduced_poses = current_poses
-                    reduced_times = current_waypose_times
-            else:
-                reduced_poses = current_poses
-                reduced_times = current_waypose_times
-
-            W = len(reduced_poses[0,:])    
-
-            rounds = 3
-
-            new_poses = np.zeros((3,W + 2 + rounds * 4))
-            new_times = np.zeros(W + 2 + rounds * 4)
-            new_poses[:,:W] = reduced_poses
-            new_times[:W] = reduced_times
-            new_poses[0,W] = reduced_poses[0,-1]
-            new_poses[1,W] = reduced_poses[1,-1]
-            new_poses[2,W] = np.arctan2(next_waypoint[1] - reduced_poses[1,-1], next_waypoint[0] - reduced_poses[0,-1])
-            new_times[W] = reduced_times[-1] + 1
-            new_poses[0,W + 1] = next_waypoint[0]
-            new_poses[1,W + 1] = next_waypoint[1]
-            new_poses[2,W + 1] = new_poses[2,W]
-            new_times[W + 1] = new_times[W] + next_travel_duration
-            
-
-            dir = np.sign(np.random.randn(1))
-            for ts in range(rounds * 4):
-                new_poses[0,W + 2 + ts] = next_waypoint[0]
-                new_poses[1,W + 2 + ts] = next_waypoint[1]
-                new_poses[2,W + 2 + ts] = np.remainder(new_poses[2,W + 2 + ts - 1] + dir * m.pi / 2 + m.pi,2 * m.pi) - m.pi
-                new_times[W + 2 + ts] = new_times[W + 2 + ts - 1] + 0.5
-        
-        return new_poses, new_times
-
-    def wait4pose(self):
-        # Initialisation : Wait for pose
-        while not np.all(self.rob_state) :
-                time.sleep(0.1)
-                self.get_logger().info('No pose yet, waiting again...\n')
-
-        return
-    def generate_reference_trajectory_from_timed_wayposes(self, current_state, wayposes, waypose_times,t,Ts,N,mode = 'ignore_corners'):
-        x_pos_ref = np.ones(N + 1)*current_state[0]
-        y_pos_ref = np.ones(N  + 1)*current_state[1]
-        theta_ref = np.ones(N  + 1)*current_state[2]
-        v_ref = np.zeros(N + 1)
-        omega_ref = np.zeros(N + 1)
-        
-        if mode == 'ignore_corners':
-            t_vec = t + np.linspace(0,N * Ts, N + 1)
-            for k in range(N + 1):
-                idx_poses_after_t = np.argwhere(waypose_times > t_vec[k])
-                if idx_poses_after_t.size > 0:
-                    idx_k = idx_poses_after_t[0]
-                    if idx_k > 0:
-                        v_ref[k] = np.sqrt((wayposes[1,idx_k] - wayposes[1,idx_k - 1]) ** 2 + (wayposes[0,idx_k] - wayposes[0,idx_k - 1]) ** 2) / (waypose_times[idx_k] - waypose_times[idx_k - 1])
-                        theta_ref[k] = np.arctan2(wayposes[1,idx_k] - wayposes[1,idx_k - 1], wayposes[0,idx_k] - wayposes[0,idx_k - 1])
-                        l = (t_vec[k] - waypose_times[idx_k - 1]) / (waypose_times[idx_k] - waypose_times[idx_k - 1])
-                        x_pos_ref[k] = l * wayposes[0,idx_k] + (1 - l) * wayposes[0,idx_k - 1]
-                        y_pos_ref[k] = l * wayposes[1,idx_k] + (1 - l) * wayposes[1,idx_k - 1]
-        
-        if mode == 'stop_in_corners':
-            t_vec = t + np.linspace(0,N * Ts, N + 1)
-            for k in range(N + 1):
-                idx_poses_after_t = np.argwhere(waypose_times > t_vec[k])
-                if idx_poses_after_t.size > 0:
-                    idx_k = idx_poses_after_t[0]
-                    if idx_k > 0:
-                        v_ref[k] = np.sqrt((wayposes[1,idx_k] - wayposes[1,idx_k - 1]) ** 2 + (wayposes[0,idx_k] - wayposes[0,idx_k - 1]) ** 2) / (waypose_times[idx_k] - waypose_times[idx_k - 1])
-                        if np.remainder(idx_k,2) == 0:
-                            l = (t_vec[k] - waypose_times[idx_k - 1]) / (waypose_times[idx_k] - waypose_times[idx_k - 1])
-                            theta_ref[k] = np.arctan2(wayposes[1,idx_k] - wayposes[1,idx_k - 1], wayposes[0,idx_k] - wayposes[0,idx_k - 1])
-                            x_pos_ref[k] = l * wayposes[0,idx_k] + (1 - l) * wayposes[0,idx_k - 1]
-                            y_pos_ref[k] = l * wayposes[1,idx_k] + (1 - l) * wayposes[1,idx_k - 1]
-                        else:
-                            x_pos_ref[k] = wayposes[0,idx_k - 1]
-                            y_pos_ref[k] = wayposes[1,idx_k - 1]
-                            l_rot = (t_vec[k] - waypose_times[idx_k - 1]) / (waypose_times[idx_k] - waypose_times[idx_k - 1])
-                            # print(l_rot)
-                            theta_ref[k]  = wayposes[2,idx_k - 1] + l_rot *  np.arctan2(np.sin(wayposes[2,idx_k] - wayposes[2,idx_k - 1]),np.cos(wayposes[2,idx_k] - wayposes[2,idx_k - 1]))
-                            omega_ref[k] = np.arctan2(np.sin(wayposes[2,idx_k] - wayposes[2,idx_k - 1]),np.cos(wayposes[2,idx_k] - wayposes[2,idx_k - 1])) / (waypose_times[idx_k] - waypose_times[idx_k - 1])
-                    else:
-                        v_ref[k] = np.sqrt((wayposes[1,idx_k] - wayposes[1,idx_k - 1]) ** 2 + (wayposes[0,idx_k] - wayposes[0,idx_k - 1]) ** 2) / (waypose_times[idx_k] - waypose_times[idx_k - 1])
-        
-        if mode == 'go_straight_or_turn':
-            t_vec = t + np.linspace(0,N * Ts, N + 1)
-            for k in range(N + 1):
-                idx_poses_after_t = np.argwhere(waypose_times > t_vec[k])
-                if idx_poses_after_t.size > 0:
-                    idx_k = idx_poses_after_t[0]
-                    if idx_k > 0:
-                        v_ref[k] = np.sqrt((wayposes[1,idx_k] - wayposes[1,idx_k - 1]) ** 2 + (wayposes[0,idx_k] - wayposes[0,idx_k - 1]) ** 2) / (waypose_times[idx_k] - waypose_times[idx_k - 1])
-                        if v_ref[k] != 0:
-                            l = (t_vec[k] - waypose_times[idx_k - 1]) / (waypose_times[idx_k] - waypose_times[idx_k - 1])
-                            theta_ref[k] = np.arctan2(wayposes[1,idx_k] - wayposes[1,idx_k - 1], wayposes[0,idx_k] - wayposes[0,idx_k - 1])
-                            x_pos_ref[k] = l * wayposes[0,idx_k] + (1 - l) * wayposes[0,idx_k - 1]
-                            y_pos_ref[k] = l * wayposes[1,idx_k] + (1 - l) * wayposes[1,idx_k - 1]
-                        else:
-                            x_pos_ref[k] = wayposes[0,idx_k - 1]
-                            y_pos_ref[k] = wayposes[1,idx_k - 1]
-                            l_rot = (t_vec[k] - waypose_times[idx_k - 1]) / (waypose_times[idx_k] - waypose_times[idx_k - 1])
-                            # print(l_rot)
-                            theta_ref[k]  = wayposes[2,idx_k - 1] + l_rot *  np.arctan2(np.sin(wayposes[2,idx_k] - wayposes[2,idx_k - 1]),np.cos(wayposes[2,idx_k] - wayposes[2,idx_k - 1]))
-                            omega_ref[k] = np.arctan2(np.sin(wayposes[2,idx_k] - wayposes[2,idx_k - 1]),np.cos(wayposes[2,idx_k] - wayposes[2,idx_k - 1])) / (waypose_times[idx_k] - waypose_times[idx_k - 1])
-                    else:
-                        v_ref[k] = np.sqrt((wayposes[1,idx_k] - wayposes[1,idx_k - 1]) ** 2 + (wayposes[0,idx_k] - wayposes[0,idx_k - 1]) ** 2) / (waypose_times[idx_k] - waypose_times[idx_k - 1])
-
-
-        state_ref = np.vstack((x_pos_ref.reshape(1,N + 1), y_pos_ref.reshape(1,N + 1), theta_ref.reshape(1,N + 1)))
-        input_ref = np.vstack((v_ref[:-1].reshape(1,N), omega_ref[:-1].reshape(1,N)))
-        return state_ref, input_ref
-
-
+        self.jb_positions = np.array([[poses[0].pose.position.x, poses[0].pose.position.y, theta]])
+        for p in poses[1:] :
+            quat = [p.pose.orientation.x, p.pose.orientation.y, p.pose.orientation.z, p.pose.orientation.w]
+            theta = quat2eul(quat)
+            self.jb_positions = np.append(self.jb_positions, np.array([[p.pose.position.x, p.pose.position.y, theta]]), axis=0)
+    
+        return            
 
 def main(args=None):
     rclpy.init(args=args)
