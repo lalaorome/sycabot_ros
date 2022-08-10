@@ -64,7 +64,7 @@ class MPC(CtrllerActionServer):
         wayposes = []
         for i in range(len(wayposes_times)):
             wayposes.append([path[i].x,path[i].y,path[i].theta])
-        wayposes = np.array(wayposes)
+        wayposes = np.transpose(wayposes)
         wayposes_times = np.array(wayposes_times)
         print(wayposes, wayposes_times)
         
@@ -104,7 +104,7 @@ class MPC(CtrllerActionServer):
             ocp_solver.set(0, "ubx", x_pf)
 
             # reference
-            [state_ref, input_ref] = self.generate_reference_trajectory_from_timed_wayposes(x0, wayposes, wayposes_times, t_run,Ts_MPC, self.N, mode='go_straight_or_turn')
+            [state_ref, input_ref] = self.generate_reference_trajectory_from_timed_wayposes(x0, wayposes, wayposes_times, t_run+self.expected_delay,Ts_MPC, self.N, mode='go_straight_or_turn')
 
             for k in range(self.N):
                 if k == 0:
