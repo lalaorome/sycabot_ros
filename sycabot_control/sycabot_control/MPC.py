@@ -351,7 +351,7 @@ class MPC(CtrllerActionServer):
                 reduced_poses = current_poses
                 reduced_times = current_waypose_times
 
-            W = len(reduced_times)    
+            W = len(reduced_poses[0,:])    
 
             rounds = 3
 
