@@ -11,7 +11,6 @@ from rclpy.qos import qos_profile_sensor_data
 from geometry_msgs.msg import PoseStamped, Pose2D
 from sycabot_interfaces.action import Control
 from sycabot_interfaces.msg import Motor, Viz
-from geometry_msgs.msg import Pose2D
 
 
 class CtrllerActionServer(Node):

@@ -9,7 +9,7 @@ from sycabot_interfaces.action import Control
 import numpy as np
 import random
 
-class DeadzoneActionClient(Node):
+class ControlActionClient(Node):
 
     def __init__(self):
         super().__init__('control_action_client')

@@ -59,9 +59,9 @@ class MPC(CtrllerActionServer):
         init_pose.x = self.rob_state[0]
         init_pose.y = self.rob_state[1]
         init_pose.theta = self.rob_state[2]
-        path = goal_handle.request.path
+        wayposes = goal_handle.request.path
+        wayposes_times = goal_handle.rquest.timestamps
         path.insert(0,init_pose)
-        print(path)
         # timed_path = self.add_time_to_wayposes(path, 0., 0.2, mode=mode)
         
         wayposes, wayposes_times = [],[]
