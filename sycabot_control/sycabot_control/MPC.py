@@ -370,7 +370,7 @@ class MPC(CtrllerActionServer):
                 new_poses[2,W + 2 + ts] = np.remainder(new_poses[2,W + 2 + ts - 1] + dir * math.pi / 2 + math.pi,2 * math.pi) - math.pi
                 new_times[W + 2 + ts] = new_times[W + 2 + ts - 1] + 0.5
         else :
-            new_poses = np.zeros(3,1)
+            new_poses = np.zeros((3,1))
             new_poses[:2,0] = next_waypoint[:2]
             new_poses[2] = 0.
             new_times = current_t
