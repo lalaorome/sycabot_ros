@@ -53,6 +53,7 @@ class beacon(Node):
         else : self.updated = False
 
 
+
 def main(args=None):
     rclpy.init(args=args)
     executor = MultiThreadedExecutor()

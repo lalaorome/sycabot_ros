@@ -19,18 +19,32 @@ class MPCActionClient(Node):
         super().__init__('control_action_client')
 
         self.declare_parameter('SycaBot_id', 1)
-        cb_group = ReentrantCallbackGroup()
-        self.Sycabot_id = self.get_parameter('SycaBot_id').value
         
-        self._action_client = ActionClient(self, Control, f'/SycaBot_W{self.Sycabot_id}/MPC_start_control', callback_group=cb_group)
+        self.Sycabot_id = self.get_parameter('SycaBot_id').value
 
-        # Subscribe to pose topic
-        self.pose_sub = self.create_subscription(PoseStamped, f'/mocap_node/SycaBot_W{self.Sycabot_id}/pose', self.get_pose_cb, 1, callback_group=cb_group)
-
+        self.add_on_set_parameters_callback(self.parameters_callback)
+        
         self.rob_state = np.array([False,False,False]) # x,y,theta: [-pi,pi]
         self.velocity = np.array([0.,0.])
         self.previous_state  = np.array([0.,0.,0.])
         self.start = False
+
+    def intialise(self):
+        cb_group = ReentrantCallbackGroup()
+        self._action_client = ActionClient(self, Control, f'/SycaBot_W{self.Sycabot_id}/MPC_start_control', callback_group=cb_group)
+        self.pose_sub = self.create_subscription(PoseStamped, f'/mocap_node/SycaBot_W{self.Sycabot_id}/pose', self.get_pose_cb, 1, callback_group=cb_group)
+    
+    def destroy_links(self):
+        self._action_client.destroy()
+        self.pose_sub.destroy()
+
+    def parameters_callback(self, params):
+        for param in params :
+            if param.name == 'id' :
+                self.Sycabot_id = self.param.value
+        self.destroy_links()
+        self.intialise()
+
 
     def get_pose_cb(self, p):
         '''
@@ -236,6 +250,7 @@ def main(args=None):
     rclpy.init(args=args)
     executor = MultiThreadedExecutor()
     node = MPCActionClient()
+    node.intialise()
     executor.add_node(node)
     try :
         executor.spin()

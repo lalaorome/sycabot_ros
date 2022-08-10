@@ -92,6 +92,7 @@ class cCAPT(Node):
         task.z = 0.
 
         response.task = task
+        response.tf = self.tf
 
         return response
         
@@ -150,12 +151,12 @@ class cCAPT(Node):
         # Step 3 : Compute phi_star using a simple optimizer
         row_idx, col_idx = linear_sum_assignment(D)
         phi[row_idx, col_idx] = 1
-        tf = round(max(norm(self.jb_positions[:,0:2] - self.goals[col_idx], axis=1))/vmax)
+        tf = max(norm(self.jb_positions[:,0:2] - self.goals[col_idx], axis=1))/vmax
 
 
         # Step 4 : Compute trajectory and the task where goals[i] corresponds to jebtot[i]
         self.goals = phi@self.goals
-        
+        self.tf = tf
         return
     
     def initialise_pose_acquisition(self):
