@@ -59,15 +59,15 @@ class MPC(CtrllerActionServer):
         init_pose.x = self.rob_state[0]
         init_pose.y = self.rob_state[1]
         init_pose.theta = self.rob_state[2]
-        wayposes = goal_handle.request.path
-        wayposes_times = goal_handle.rquest.timestamps
-        path.insert(0,init_pose)
-        # timed_path = self.add_time_to_wayposes(path, 0., 0.2, mode=mode)
+        path = goal_handle.request.path
+        wayposes_times = goal_handle.request.timestamps
+        wayposes = []
+        for i in range(len(wayposes_times)):
+            wayposes.append([path[i].x,path[i].y,path[i].theta])
+        wayposes = np.array(wayposes)
+        wayposes_times = np.array(wayposes_times)
+        print(wayposes, wayposes_times)
         
-        wayposes, wayposes_times = [],[]
-        for p in path:
-            wayposes, wayposes_times = self.add_syncronised_waypose(wayposes, wayposes_times, 0., np.array([p.x,p.y]), 10.)
-            print(wayposes, wayposes_times)
 
         # [state_plot, input_plot] = self.get_reference(0,0.1,200)
         
@@ -104,7 +104,7 @@ class MPC(CtrllerActionServer):
             ocp_solver.set(0, "ubx", x_pf)
 
             # reference
-            [state_ref, input_ref] = self.generate_reference_trajectory_from_timed_wayposes(x0, wayposes, wayposes_times, t_run,Ts_MPC, self.N, mode='go_straight_or_turn')
+            [state_ref, input_ref] = self.generate_reference_trajectory_from_timed_wayposes(wayposes, wayposes_times, t_run,Ts_MPC, self.N, mode='go_straight_or_turn')
 
             for k in range(self.N):
                 if k == 0:
@@ -379,10 +379,10 @@ class MPC(CtrllerActionServer):
         
         return new_poses, new_times
 
-    def generate_reference_trajectory_from_timed_wayposes(self, current_state, wayposes, waypose_times,t,Ts,N,mode = 'ignore_corners'):
-        x_pos_ref = np.ones(N + 1)*current_state[0]
-        y_pos_ref = np.ones(N  + 1)*current_state[1]
-        theta_ref = np.ones(N  + 1)*current_state[2]
+    def generate_reference_trajectory_from_timed_wayposes(self, wayposes, waypose_times,t,Ts,N,mode = 'ignore_corners'):
+        x_pos_ref = np.ones(N + 1)
+        y_pos_ref = np.ones(N  + 1)
+        theta_ref = np.ones(N  + 1)
         v_ref = np.zeros(N + 1)
         omega_ref = np.zeros(N + 1)
         

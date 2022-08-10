@@ -1,18 +1,19 @@
 import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionClient
-from rclpy.executors import ExternalShutdownException
 from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.executors import MultiThreadedExecutor
 
 from sycabot_interfaces.msg import Pose2D
 from sycabot_interfaces.action import Control
-from geometry_msgs.msg import PoseStamped, Pose2D
+from geometry_msgs.msg import PoseStamped
 from sycabot_utils.utilities import quat2eul
 
 import numpy as np
 import time
+import math as m
 
-class DeadzoneActionClient(Node):
+class cCAPT(Node):
 
     def __init__(self):
         super().__init__('control_action_client')
@@ -21,7 +22,7 @@ class DeadzoneActionClient(Node):
         cb_group = ReentrantCallbackGroup()
         self.Sycabot_id = self.get_parameter('SycaBot_id').value
         
-        self._action_client = ActionClient(self, Control, f'/SycaBot_W{self.Sycabot_id}/MPC_start_control')
+        self._action_client = ActionClient(self, Control, f'/SycaBot_W{self.Sycabot_id}/MPC_start_control', callback_group=cb_group)
 
         # Subscribe to pose topic
         self.pose_sub = self.create_subscription(PoseStamped, f'/mocap_node/SycaBot_W{self.Sycabot_id}/pose', self.get_pose_cb, 1, callback_group=cb_group)
@@ -29,6 +30,7 @@ class DeadzoneActionClient(Node):
         self.rob_state = np.array([False,False,False]) # x,y,theta: [-pi,pi]
         self.velocity = np.array([0.,0.])
         self.previous_state  = np.array([0.,0.,0.])
+        self.start = False
 
     def get_pose_cb(self, p):
         '''
@@ -44,10 +46,13 @@ class DeadzoneActionClient(Node):
         self.previous_state = self.rob_state
         self.rob_state = np.array([p.pose.position.x, p.pose.position.y, theta])
         self.time = float(p.header.stamp.sec) + float(p.header.stamp.nanosec)*10e-10
-        self.velocity = self.get_velocity()
+        if not self.start :
+            self.send_goal()
+            self.start = True
+            print(self.start)
         return
 
-    def send_goal(self, order):
+    def send_goal(self):
         self.wait4pose()
         goal_msg = Control.Goal()
         self._action_client.wait_for_server()
@@ -62,8 +67,8 @@ class DeadzoneActionClient(Node):
         wayposes, wayposes_times = [],[]
         for p in path:
             wayposes, wayposes_times = self.add_syncronised_waypose(wayposes, wayposes_times, 0., np.array([p.x,p.y]), 10.)
-            print(wayposes, wayposes_times)
-
+        # print(wayposes, wayposes_times)
+        path = []
         for i in range(len(wayposes_times)):
             pose = Pose2D()
             pose.x = wayposes[0,i]
@@ -71,7 +76,7 @@ class DeadzoneActionClient(Node):
             pose.theta = wayposes[2,i]
             path.append(pose)
         goal_msg.path = path
-        goal_msg.timestamps = wayposes_times
+        goal_msg.timestamps = wayposes_times.tolist()
         self._send_goal_future = self._action_client.send_goal_async(goal_msg)
         self._send_goal_future.add_done_callback(self.goal_response_callback)
 
@@ -127,7 +132,6 @@ class DeadzoneActionClient(Node):
 
             new_poses = np.zeros((3,W + 2 + rounds * 4))
             new_times = np.zeros(W + 2 + rounds * 4)
-            print(new_times, new_poses)
             new_poses[:,:W] = reduced_poses
             new_times[:W] = reduced_times
             new_poses[0,W] = reduced_poses[0,-1]
@@ -144,7 +148,7 @@ class DeadzoneActionClient(Node):
             for ts in range(rounds * 4):
                 new_poses[0,W + 2 + ts] = next_waypoint[0]
                 new_poses[1,W + 2 + ts] = next_waypoint[1]
-                new_poses[2,W + 2 + ts] = np.remainder(new_poses[2,W + 2 + ts - 1] + dir * math.pi / 2 + math.pi,2 * math.pi) - math.pi
+                new_poses[2,W + 2 + ts] = np.remainder(new_poses[2,W + 2 + ts - 1] + dir * m.pi / 2 + m.pi,2 * m.pi) - m.pi
                 new_times[W + 2 + ts] = new_times[W + 2 + ts - 1] + 0.5
         
         return new_poses, new_times
@@ -231,12 +235,17 @@ class DeadzoneActionClient(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-
-    action_client = DeadzoneActionClient()
-
-    action_client.send_goal(10)
-
-    rclpy.spin(action_client)
+    executor = MultiThreadedExecutor()
+    node = cCAPT()
+    executor.add_node(node)
+    try :
+        executor.spin()
+    except Exception as e :
+        print(e)
+    finally:
+        executor.shutdown()
+        node.destroy_node()
+    return
 
 
 if __name__ == '__main__':
