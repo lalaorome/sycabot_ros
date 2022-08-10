@@ -1,0 +1,4 @@
+export FASTRTPS_DEFAULT_PROFILES_FILE=config/fastDDS/super_client_configuration_file.xml
+source config/setup_ROS.sh
+ros2 daemon stop
+ros2 daemon start

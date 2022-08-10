@@ -52,6 +52,7 @@ while :; do
         --srv)
             if [ "$2" ];then
                 echo "setting discovery server ip..."
+                echo $2
                 export ROS_DISCOVERY_SERVER="192.168.1.$2:11811"
                 shift
             else
