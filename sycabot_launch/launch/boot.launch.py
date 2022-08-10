@@ -53,9 +53,19 @@ def generate_launch_description():
         output = 'screen',
         emulate_tty=True,
     )
+
+    beaconClient = Node(
+        package= 'sycabot_base',
+        namespace= 'SycaBot_W' + str(SYCABOT_ID),
+        executable= 'advertise_id',
+        output = 'screen',
+        emulate_tty=True,
+    )
+
     description.append(IdentificationActionServer)
     description.append(DeadzoneActionServer)
     description.append(MPCActionServer)
     description.append(PPCtrllerActionServer)
     description.append(motors)
+    description.append(beaconClient)
     return LaunchDescription(description)

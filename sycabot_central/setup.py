@@ -22,7 +22,7 @@ setup(
         'console_scripts': [
             'deadzones_id = sycabot_central.DeadzoneActionClient:main',
             'identification = sycabot_central.IdentificationActionClient:main',
-            'control = sycabot_central.ControlActionClient:main',
+            'MPCcontrol = sycabot_central.MPCActionClient:main',
             'gamepad = sycabot_central.GamepadActionServer:main',
         ],
     },
