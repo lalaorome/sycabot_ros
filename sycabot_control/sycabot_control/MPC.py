@@ -66,7 +66,7 @@ class MPC(CtrllerActionServer):
         
         timed_path = []
         for p in path:
-            timed_path = self.add_syncronised_waypose(timed_path, 0., np.array([p.x,p.y]), 10.)
+            wayposes, wayposes_times = self.add_syncronised_waypose(timed_path, 0., np.array([p.x,p.y]), 10.)
         print(timed_path)
 
         # [state_plot, input_plot] = self.get_reference(0,0.1,200)
@@ -104,7 +104,7 @@ class MPC(CtrllerActionServer):
             ocp_solver.set(0, "ubx", x_pf)
 
             # reference
-            [state_ref, input_ref] = self.generate_reference_trajectory_from_timed_wayposes(x0, timed_path, t_run,Ts_MPC, self.N, mode='go_straight_or_turn')
+            [state_ref, input_ref] = self.generate_reference_trajectory_from_timed_wayposes(x0, wayposes, wayposes_times, t_run,Ts_MPC, self.N, mode='go_straight_or_turn')
 
             for k in range(self.N):
                 if k == 0:
@@ -372,7 +372,7 @@ class MPC(CtrllerActionServer):
                 timed_poses[1,W + 2 + ts] = next_waypoint[1]
                 timed_poses[2,W + 2 + ts] = np.remainder(timed_poses[2,W + 2 + ts - 1] + dir * math.pi / 2 + math.pi,2 * math.pi) - math.pi
                 timed_poses[3,W + 2 + ts] = timed_poses[3,W + 2 + ts - 1] + 0.5  
-        return timed_poses
+        return timed_poses[:3,:], timed_poses[3,:]
 
     def generate_reference_trajectory_from_timed_wayposes(self, current_state, wayposes, waypose_times,t,Ts,N,mode = 'ignore_corners'):
         x_pos_ref = np.ones(N + 1)*current_state[0]
