@@ -368,7 +368,12 @@ class MPC(CtrllerActionServer):
                 new_poses[0,W + 2 + ts] = next_waypoint[0]
                 new_poses[1,W + 2 + ts] = next_waypoint[1]
                 new_poses[2,W + 2 + ts] = np.remainder(new_poses[2,W + 2 + ts - 1] + dir * math.pi / 2 + math.pi,2 * math.pi) - math.pi
-                new_times[W + 2 + ts] = new_times[W + 2 + ts - 1] + 0.5  
+                new_times[W + 2 + ts] = new_times[W + 2 + ts - 1] + 0.5
+        else :
+            new_poses = np.zeros(3,1)
+            new_poses[:2,0] = next_waypoint[:2]
+            new_poses[2] = 0.
+            new_times = current_t
         return new_poses, new_times
 
     def generate_reference_trajectory_from_timed_wayposes(self, current_state, wayposes, waypose_times,t,Ts,N,mode = 'ignore_corners'):
