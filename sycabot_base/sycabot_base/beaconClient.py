@@ -1,7 +1,7 @@
 import rclpy
 from rclpy.node import Node
 
-from interfaces.msg import BeaconMsg
+from sycabot_interfaces.msg import BeaconMsg
 
 
 SYCABOT_ID = 1
