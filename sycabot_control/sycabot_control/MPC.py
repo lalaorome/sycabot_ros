@@ -346,8 +346,10 @@ class MPC(CtrllerActionServer):
                     reduced_times = current_waypose_times[idx_next - 1:]
                 else:
                     reduced_poses = current_poses
+                    reduced_times = current_waypose_times
             else:
                 reduced_poses = current_poses
+                reduced_times = current_waypose_times
 
             W = len(reduced_times)    
 
