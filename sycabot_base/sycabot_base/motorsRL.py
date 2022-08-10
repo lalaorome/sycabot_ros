@@ -18,9 +18,8 @@ class MotorController(Node):
     def __init__(self):
         super().__init__('motors', namespace = 'Sycabot_W1')
         qos = qos_profile_sensor_data
-
-        self.sub = self.create_subscription(Motor, 'cmd_vel', self.twist_listener, qos)
         
+        self.declare_parameter('id', 1)
         self.declare_parameter('left_trim', 0.0)
         self.declare_parameter('right_trim', 0.0)
         self.declare_parameter('max_pwm', 255)
@@ -28,6 +27,7 @@ class MotorController(Node):
         self.declare_parameter('wheel_separation', 0.1016)  # 4 inches
         self.declare_parameter('wheel_diameter', 0.060325)  # 2 3/8 inches
         
+        self.id = self.get_parameter('id').value
         self.left_trim = self.get_parameter('left_trim').value
         self.right_trim = self.get_parameter('right_trim').value
         self.max_pwm = self.get_parameter('max_pwm').value
@@ -36,6 +36,8 @@ class MotorController(Node):
         self.wheel_diameter = self.get_parameter('wheel_diameter').value
         
         self.add_on_set_parameters_callback(self.parameters_callback)
+
+        self.sub = self.create_subscription(Motor, f'/SycaBot_W{self.id}/cmd_vel', self.twist_listener, qos)
          
         self.last_x = -999
         self.last_rot = -999
