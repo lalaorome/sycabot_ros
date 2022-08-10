@@ -104,7 +104,7 @@ class MPC(CtrllerActionServer):
             ocp_solver.set(0, "ubx", x_pf)
 
             # reference
-            [state_ref, input_ref] = self.generate_reference_trajectory_from_timed_wayposes(wayposes, wayposes_times, t_run,Ts_MPC, self.N, mode='go_straight_or_turn')
+            [state_ref, input_ref] = self.generate_reference_trajectory_from_timed_wayposes(x0, wayposes, wayposes_times, t_run,Ts_MPC, self.N, mode='go_straight_or_turn')
 
             for k in range(self.N):
                 if k == 0:
@@ -379,10 +379,10 @@ class MPC(CtrllerActionServer):
         
         return new_poses, new_times
 
-    def generate_reference_trajectory_from_timed_wayposes(self, wayposes, waypose_times,t,Ts,N,mode = 'ignore_corners'):
-        x_pos_ref = np.ones(N + 1)
-        y_pos_ref = np.ones(N  + 1)
-        theta_ref = np.ones(N  + 1)
+    def generate_reference_trajectory_from_timed_wayposes(self, current_state, wayposes, waypose_times,t,Ts,N,mode = 'ignore_corners'):
+        x_pos_ref = np.ones(N + 1)*current_state[0]
+        y_pos_ref = np.ones(N  + 1)*current_state[1]
+        theta_ref = np.ones(N  + 1)*current_state[2]
         v_ref = np.zeros(N + 1)
         omega_ref = np.zeros(N + 1)
         
