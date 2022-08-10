@@ -56,10 +56,10 @@ def generate_launch_description():
 
     beaconClient = Node(
         package= 'sycabot_base',
-        namespace= 'SycaBot_W' + str(SYCABOT_ID),
         executable= 'advertise_id',
         output = 'screen',
         emulate_tty=True,
+        parameters=['config/params_identification.yaml'],
     )
 
     description.append(IdentificationActionServer)
