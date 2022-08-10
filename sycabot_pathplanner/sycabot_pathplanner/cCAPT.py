@@ -69,7 +69,7 @@ class cCAPT(Node):
             N = len(self.ids)
             D=np.zeros((N,N))
             
-            for k in range(0,100000) :
+            while self.goals is None :
                 goals = np.random.rand(len(self.ids),2)
                 goals[:,0] = goals[:,0]*4 - 2.
                 goals[:,1] = goals[:,1]*6 - 3.
@@ -80,23 +80,12 @@ class cCAPT(Node):
                         if i==j : D[i,j] = 900.
 
                 if np.all(D>0.4) : 
-                    for i in range(N):
-                        for j in range(N):
-                            D[i,j] = norm(self.jb_positions[i,0:2] - goals[j])
-                        
-                    if np.all(D>2.):
-                        good_goals = True
-                        break
-                    else : self.goals = goals
-            if not good_goals : 
-                sys.exit()
+                    self.goals = goals
+
             self.cCAPT(vmax = self.MAX_LIN_VEL, t0=0.)
 
         # Step 2 : Compute and send response if id is the good one
         task = Point()
-        vlin = 0.
-        self.get_logger().info('got request from %d\n'%(request.id))
-
         
         task.x = self.goals[request.id-1,0]
         task.y = self.goals[request.id-1,1]
@@ -148,6 +137,7 @@ class cCAPT(Node):
         return :
         '''
         # Step 1 : initialise varibales N,M, D and phi
+        print(self.jb_positions, self.goals)
         N,M = self.jb_positions.shape[0], self.goals.shape[0]
         D=np.zeros((N,M))
         phi=np.zeros((N,M))
