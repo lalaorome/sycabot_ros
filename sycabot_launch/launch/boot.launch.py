@@ -70,6 +70,9 @@ def generate_launch_description():
         output = 'screen',
         emulate_tty=True,
         parameters=['config/params_identification.yaml'],
+        remappings=[
+            ("/beacon", "/beacon")
+        ],
         arguments=['--ros-args', '--log-level', LaunchConfiguration('log_level')],
     )
     description.append(verbosity_level)
