@@ -55,10 +55,11 @@ def generate_launch_description():
     )
     motors = Node(
         package= 'sycabot_base',
-        namespace= 'SycaBot_W' + str(SYCABOT_ID),
+        namespace= f'SycaBot_W{SYCABOT_ID}',
         executable= 'motors',
         output = 'screen',
         emulate_tty=True,
+        parameters=['config/params_identification.yaml'],
         arguments=['--ros-args', '--log-level', LaunchConfiguration('log_level')],
     )
 
