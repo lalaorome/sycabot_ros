@@ -83,7 +83,7 @@ class MPC(CtrllerActionServer):
         u0 = np.zeros(2,)
         while t_run < 150. or np.linalg.norm(wayposes[:,-1]-self.rob_state) < 0.001:
             
-            print(np.linalg.norm(wayposes[-1]-self.rob_state))
+            print(np.linalg.norm(wayposes[:,-1]-self.rob_state))
             t_loop = time.time()
             # update initial condition
             previous_x0 = x0
