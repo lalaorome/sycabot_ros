@@ -26,7 +26,6 @@ show_help() {
 die() {
     printf '%s\n' "$1"
     show_help
-    exit 1
 }
 
 LAUNCH_FILE_NAME="init"
@@ -46,7 +45,7 @@ while :; do
                 shift
             elif [ "$2" == "init" ];then
                 LAUNCH_FILE_NAME="$2"
-                shift
+                
             elif [ "$2" == "boot" ];then
                 sudo sed -i -r "s/from sycabot_base.motors[A-Z]+/from sycabot_base.motorsRL/" sycabot_base/sycabot_base/motors_waveshare.py
                 cat sycabot_base/sycabot_base/motors_waveshare.py
@@ -64,6 +63,7 @@ while :; do
         --id)
             if [ "$2" ];then
                 ID="$2"
+                echo $ID
                 shift
             else
                 die 'ERROR: "--id" requires a non-empty option argument.'
@@ -158,6 +158,7 @@ sudo systemctl daemon-reload
 cd ../syca_ws/sycabot_launch/launch
 sudo sed -i "s/SYCABOT_ID = ./SYCABOT_ID = ${ID}/" init.launch.py
 sudo sed -i "s/SYCABOT_ID = ./SYCABOT_ID = ${ID}/" motors.launch.py
+sudo sed -i "s/SYCABOT_ID = ./SYCABOT_ID = ${ID}/" boot.launch.py
 echo ""
 echo ""
 cat init.launch.py
