@@ -56,6 +56,10 @@ class MotorController(Node):
                 self.max_pwm = param.value
             elif param.name == 'wheel_separation':
                 self.wheel_separation = param.value
+            elif param.name == 'id':
+                self.right_trim = param.value
+            elif param.name == 'wheel_diameter':
+                self.wheel_separation = param.value
             else:
                 raise ValueError(f'unknown parameter {param.name}')
                 
