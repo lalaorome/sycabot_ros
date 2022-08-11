@@ -14,7 +14,7 @@ class beaconClient(Node):
         self.declare_parameter('id', 1)
         self.id = self.get_parameter('id').value
 
-        self.beacon = self.create_publisher(BeaconMsg, 'beacon', 10)
+        self.beacon = self.create_publisher(BeaconMsg, '/beacon', 10)
         self.timer = self.create_timer(1., self.pub_beacon_cb)
 
     def pub_beacon_cb(self):
