@@ -10,7 +10,7 @@ plot = True
 
 class beaconClient(Node):
     def __init__(self):
-        super().__init__('test')
+        super().__init__('BeaconClient')
         self.declare_parameter('id', 1)
         self.id = self.get_parameter('id').value
 

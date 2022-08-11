@@ -65,6 +65,7 @@ def generate_launch_description():
 
     beaconClient = Node(
         package= 'sycabot_base',
+        namespace= f'SycaBot_W{SYCABOT_ID}',
         executable= 'advertise_id',
         output = 'screen',
         emulate_tty=True,
