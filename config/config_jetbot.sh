@@ -170,4 +170,7 @@ echo ""
 cat boot.launch.py
 echo ""
 echo ""
+cd ../syca_ws/config
+sudo sed -i "s/id: ./id: ${ID}/" params_identification.yaml
+cat params_identification.yaml
 cd ~/syca_ws
