@@ -60,7 +60,7 @@ class CtrllerActionServer(Node):
         self.previous_state  = np.array([0.,0.,0.])
         
         # Subscribe to pose topic
-        self.pose_sub = self.create_subscription(PoseStamped, f'/mocap_node/SycaBot_W{self.id}/pose', self.get_pose_cb, 1, callback_group=cb_group)
+        self.pose_sub = self.create_subscription(PoseStamped, f'/mocap_node/SycaBot_W{self.id}/pose', self.get_pose_cb, qos, callback_group=cb_group)
 
         # Create motor publisher
         self.vel_cmd_pub = self.create_publisher(Motor, f'/SycaBot_W{self.id}/cmd_vel', qos, callback_group=cb_group)

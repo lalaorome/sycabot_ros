@@ -80,16 +80,17 @@ class cCAPT(Node):
             response (interfaces.srv/Task.Response) = 
                 task (geometry_msgs.msg/Pose) = pose of the assigned task
         '''
-
+        print('got demand')
         # Step 2 : Compute and send response if id is the good one
+        idx = np.where(self.ids==request.id)[0][0]
         task = Point()
-        task.x = self.goals[request.id-1,0]
-        task.y = self.goals[request.id-1,1]
+        task.x = self.goals[idx,0]
+        task.y = self.goals[idx,1]
         task.z = 0.
 
         response.task = task
         response.tf = self.tf
-
+        print(self.goals)
         return response
         
 
@@ -102,7 +103,7 @@ class cCAPT(Node):
             get_ids_req = BeaconSrv.Request()
             self.future = self.get_ids_cli.call_async(get_ids_req)
             rclpy.spin_until_future_complete(self, self.future)
-        self.ids = self.future.result().ids
+        self.ids = np.array(self.future.result().ids)
         return
     def refresh_ids(self):
         refresh_ids_req = Trigger.Request()
@@ -145,7 +146,7 @@ class cCAPT(Node):
         cb_group = ReentrantCallbackGroup()
         for id in self.ids:
             self.OptiTrack_sub.append(Subscriber(self, PoseStamped, f"/mocap_node/SycaBot_W{id}/pose"))
-        self.ts = ApproximateTimeSynchronizer(self.OptiTrack_sub, queue_size=10, slop = 0.1)
+        self.ts = ApproximateTimeSynchronizer(self.OptiTrack_sub, queue_size=10, slop = 1.)
         self.ts.registerCallback(self.get_jb_pose_cb)
 
     def get_jb_pose_cb(self, *poses):
