@@ -63,7 +63,7 @@ while :; do
         --id)
             if [ "$2" ];then
                 ID="$2"
-                echo $ID
+                echo "$ID"
                 shift
             else
                 die 'ERROR: "--id" requires a non-empty option argument.'
