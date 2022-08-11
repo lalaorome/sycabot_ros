@@ -1,19 +1,16 @@
 rigid_bodies:
   '1':
     pose: SycaBot_W1/pose
-    pose2d: SycaBot_W1/ground_pose
     child_frame_id: SycaBot_W1/base_link
     parent_frame_id: world
   
   '2':
     pose: SycaBot_W2/pose
-    pose2d: SycaBot_W2/ground_pose
     child_frame_id: SycaBot_W2/base_link
     parent_frame_id: world
 
   '5':
     pose: SycaBot_W5/pose
-    pose2d: SycaBot_W5/ground_pose
     child_frame_id: SycaBot_W5/base_link
     parent_frame_id: world
 
