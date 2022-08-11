@@ -10,8 +10,9 @@ SYCABOT_ID = 1
 
 def generate_launch_description():
 
-    description = [launch.actions.DeclareArgument(name='log_level', default_value='info')]
+    description = []
 
+    verbosity_level = DeclareLaunchArgument(name='log_level', default_value='info')
 
     DeadzoneActionServer = Node(
         package= 'sycabot_identification',
@@ -69,7 +70,7 @@ def generate_launch_description():
         parameters=['config/params_identification.yaml'],
         arguments=['--ros-args', '--log-level', LaunchConfiguration('log_level')],
     )
-
+    description.append(verbosity_level)
     description.append(IdentificationActionServer)
     description.append(DeadzoneActionServer)
     description.append(MPCActionServer)
