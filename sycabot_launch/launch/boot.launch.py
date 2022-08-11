@@ -71,7 +71,7 @@ def generate_launch_description():
         emulate_tty=True,
         parameters=['config/params_identification.yaml'],
         remappings=[
-            ("/beacon", "/beacon")
+            (f"SycaBot_W{SYCABOT_ID}/beacon", "/beacon")
         ],
         arguments=['--ros-args', '--log-level', LaunchConfiguration('log_level')],
     )

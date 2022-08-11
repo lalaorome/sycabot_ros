@@ -1,3 +1,4 @@
+from argparse import Namespace
 import rclpy
 from rclpy.node import Node
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallbackGroup
@@ -18,7 +19,7 @@ class beacon(Node):
     It is possible to refresh the list if it is not updated.
     '''
     def __init__(self):
-        super().__init__('beacon')
+        super().__init__('beacon', namespace='central')
         self.ids = []
         self.prev_count = 0
         cb_group = ReentrantCallbackGroup()
