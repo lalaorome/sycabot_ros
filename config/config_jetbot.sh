@@ -137,7 +137,7 @@ cp -r ./. ../syca_ws/
 
 # Copy service file and make systemctl recgonize it
 # Set the boot file
-cd ../syca_ws
+cd ~/syca_ws
 sudo sed -i -r "s/ros2 launch sycabot_launch [a-z]+/ros2 launch sycabot_launch ${LAUNCH_FILE_NAME}/" config/boot_init.sh
 echo ""
 echo ""
@@ -155,7 +155,7 @@ echo 'daemon reload'
 sudo systemctl daemon-reload
 
 # Change SYCABOT_ID number : https://www.geeksforgeeks.org/sed-command-in-linux-unix-with-examples/
-cd ../syca_ws/sycabot_launch/launch
+cd ~/syca_ws/sycabot_launch/launch
 sudo sed -i "s/SYCABOT_ID = ./SYCABOT_ID = ${ID}/" init.launch.py
 sudo sed -i "s/SYCABOT_ID = ./SYCABOT_ID = ${ID}/" motors.launch.py
 sudo sed -i "s/SYCABOT_ID = ./SYCABOT_ID = ${ID}/" boot.launch.py
@@ -170,7 +170,7 @@ echo ""
 cat boot.launch.py
 echo ""
 echo ""
-cd ../syca_ws/config
+cd ~/syca_ws/config
 sudo sed -i "s/id: ./id: ${ID}/" params_identification.yaml
 cat params_identification.yaml
 cd ~/syca_ws
