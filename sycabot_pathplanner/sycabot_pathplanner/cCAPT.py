@@ -1,7 +1,7 @@
 from asyncio import futures
 import rclpy
 from rclpy.node import Node
-from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 
@@ -27,11 +27,8 @@ class cCAPT(Node):
         self.initialised = False
         self.jb_positions = None
         self.OptiTrack_sub = []
-        self.ids = None
         self.goals = None
-
-        cb_group = ReentrantCallbackGroup()
-
+        cb_group = MutuallyExclusiveCallbackGroup()
         # Define get ids service client
         self.get_ids_cli = self.create_client(BeaconSrv, 'get_list_ids')
         while not self.get_ids_cli.wait_for_service(timeout_sec=1.0):
@@ -43,9 +40,34 @@ class cCAPT(Node):
             self.get_logger().info('Refresh ids service not available, waiting again...\n')
         
         # Create service for task request
-        self.task_srv = self.create_service(Task, 'task_srv', self.set_task_cb, callback_group = cb_group)
+        self.task_srv = self.create_service(Task, 'task_srv', self.set_task_cb, callback_group=cb_group)
 
-    async def set_task_cb(self, request, response):
+        self.get_ids()
+        self.initialise_pose_acquisition()
+        self.initialise_poses()
+        
+
+    def initialise_poses(self):
+        while self.jb_positions is None :
+            time.sleep(0.1)
+            self.get_logger().info("Waiting for positions...")
+            rclpy.spin_once(self)
+        N = len(self.ids)
+        D=np.zeros((N,N))
+        
+        while self.goals is None :
+            goals = np.random.rand(len(self.ids),2)
+            goals[:,0] = goals[:,0]*4 - 2.
+            goals[:,1] = goals[:,1]*6 - 3.
+            for i in range(N):
+                for j in range(N):
+                    D[i,j] = norm(goals[i] - goals[j])
+                    if i==j : D[i,j] = 900.
+            if np.all(D>0.4) : 
+                self.goals = goals
+        self.cCAPT(vmax = self.MAX_LIN_VEL, t0=0.)
+
+    def set_task_cb(self, request, response):
         '''
         Compute goals if it has never been init and give it to the asking jetbot.
 
@@ -58,36 +80,9 @@ class cCAPT(Node):
             response (interfaces.srv/Task.Response) = 
                 task (geometry_msgs.msg/Pose) = pose of the assigned task
         '''
-        if not self.initialised :
-            await self.get_ids()
-            self.initialise_pose_acquisition()
-            while self.jb_positions is None :
-                time.sleep(0.1)
-                self.get_logger().info("Waiting for positions...")
-
-            good_goals = False
-            N = len(self.ids)
-            D=np.zeros((N,N))
-            
-            while self.goals is None :
-                goals = np.random.rand(len(self.ids),2)
-                goals[:,0] = goals[:,0]*4 - 2.
-                goals[:,1] = goals[:,1]*6 - 3.
-
-                for i in range(N):
-                    for j in range(N):
-                        D[i,j] = norm(goals[i] - goals[j])
-                        if i==j : D[i,j] = 900.
-
-                if np.all(D>0.4) : 
-                    self.goals = goals
-
-            self.cCAPT(vmax = self.MAX_LIN_VEL, t0=0.)
-            self.initialised = True
 
         # Step 2 : Compute and send response if id is the good one
         task = Point()
-        
         task.x = self.goals[request.id-1,0]
         task.y = self.goals[request.id-1,1]
         task.z = 0.
@@ -98,33 +93,21 @@ class cCAPT(Node):
         return response
         
 
-    async def get_ids(self):
+    def get_ids(self):
         get_ids_req = BeaconSrv.Request()
-        future = self.get_ids_cli.call_async(get_ids_req)
-        try :
-            get_ids = await future
-        except Exception as e:
-            self.get_logger().info('Get ids service call failed %r' % (e,))
-
-        if not get_ids.success :
-            self.get_logger().info(f'{get_ids.message}')
-            refresh_req = Trigger.Request()
-            future = self.refresh_ids_cli.call_async(refresh_req)
-            try :
-                result = await future
-            except Exception as e:
-                self.get_logger().info('Refresh ids service call failed %r' % (e,))
-            else :
-                get_ids_req = BeaconSrv.Request()
-                future = self.get_ids_cli.call_async(get_ids_req)
-                try :
-                    result = await future
-                except Exception as e:
-                    self.get_logger().info('Get ids service call failed %r' % (e,))
-                else :
-                    self.ids = result.ids
-        else : 
-            self.ids = np.array(get_ids.ids)
+        self.future = self.get_ids_cli.call_async(get_ids_req)
+        rclpy.spin_until_future_complete(self, self.future)
+        while not self.future.result().success :
+            self.future = self.refresh_ids()
+            get_ids_req = BeaconSrv.Request()
+            self.future = self.get_ids_cli.call_async(get_ids_req)
+            rclpy.spin_until_future_complete(self, self.future)
+        self.ids = self.future.result().ids
+        return
+    def refresh_ids(self):
+        refresh_ids_req = Trigger.Request()
+        self.future = self.get_ids_cli.call_async(refresh_ids_req)
+        rclpy.spin_until_future_complete(self, self.future)
         return
 
     def cCAPT(self, vmax=1., t0=0):
@@ -139,21 +122,18 @@ class cCAPT(Node):
         return :
         '''
         # Step 1 : initialise varibales N,M, D and phi
-        print(self.jb_positions, self.goals)
         N,M = self.jb_positions.shape[0], self.goals.shape[0]
         D=np.zeros((N,M))
         phi=np.zeros((N,M))
-        
         # Step 2 : Compute cost matrix for each position and goal
         for i in range(N):
             for j in range(M):
                 D[i,j] = norm(self.jb_positions[i,0:2] - self.goals[j])**2
-        
         # Step 3 : Compute phi_star using a simple optimizer
         row_idx, col_idx = linear_sum_assignment(D)
         phi[row_idx, col_idx] = 1
         tf = max(norm(self.jb_positions[:,0:2] - self.goals[col_idx], axis=1))/vmax
-
+        
 
         # Step 4 : Compute trajectory and the task where goals[i] corresponds to jebtot[i]
         self.goals = phi@self.goals
@@ -162,6 +142,7 @@ class cCAPT(Node):
     
     def initialise_pose_acquisition(self):
         # Create sync callback group to get all the poses
+        cb_group = ReentrantCallbackGroup()
         for id in self.ids:
             self.OptiTrack_sub.append(Subscriber(self, PoseStamped, f"/mocap_node/SycaBot_W{id}/pose"))
         self.ts = ApproximateTimeSynchronizer(self.OptiTrack_sub, queue_size=10, slop = 0.1)

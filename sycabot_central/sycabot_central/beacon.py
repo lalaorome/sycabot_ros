@@ -19,7 +19,7 @@ class beacon(Node):
     It is possible to refresh the list if it is not updated.
     '''
     def __init__(self):
-        super().__init__('beacon', namespace='central')
+        super().__init__('beacon')
         self.ids = []
         self.prev_count = 0
         cb_group = ReentrantCallbackGroup()
