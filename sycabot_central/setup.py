@@ -25,6 +25,7 @@ setup(
             'MPCcontrol = sycabot_central.MPCActionClient:main',
             'gamepad = sycabot_central.GamepadActionServer:main',
             'beacon = sycabot_central.beacon:main',
+            'central = sycabot_central.central:main',
         ],
     },
 )

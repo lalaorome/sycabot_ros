@@ -83,6 +83,7 @@ class cCAPT(Node):
                     self.goals = goals
 
             self.cCAPT(vmax = self.MAX_LIN_VEL, t0=0.)
+            self.initialised = True
 
         # Step 2 : Compute and send response if id is the good one
         task = Point()

@@ -1,5 +1,5 @@
 import rclpy
-from rclpy import Node
+from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.action import ActionClient
 
@@ -9,10 +9,13 @@ from sycabot_interfaces.srv import BeaconSrv, Task
 from sycabot_interfaces.action import Control 
 from sycabot_interfaces.msg import Pose2D
 from std_srvs.srv import Trigger
+from geometry_msgs.msg import PoseStamped
+
 
 import numpy as np
 import time
-
+import math as m
+from sycabot_utils.utilities import quat2eul
 
 class central(Node):
     def __init__(self):
@@ -31,57 +34,52 @@ class central(Node):
         while not self.refresh_ids_cli.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('Refresh ids service not available, waiting again...\n')
     
-    async def get_ids(self):
+    def get_ids(self):
         get_ids_req = BeaconSrv.Request()
         future = self.get_ids_cli.call_async(get_ids_req)
-        try :
-            get_ids = await future
-        except Exception as e:
-            self.get_logger().info('Get ids service call failed %r' % (e,))
+        return future
 
-        if not get_ids.success :
-            self.get_logger().info(f'{get_ids.message}')
-            refresh_req = Trigger.Request()
-            future = self.refresh_ids_cli.call_async(refresh_req)
-            try :
-                result = await future
-            except Exception as e:
-                self.get_logger().info('Refresh ids service call failed %r' % (e,))
-            else :
-                time.sleep(1.)
-                get_ids_req = BeaconSrv.Request()
-                future = self.get_ids_cli.call_async(get_ids_req)
-                try :
-                    result = await future
-                except Exception as e:
-                    self.get_logger().info('Get ids service call failed %r' % (e,))
-                else :
-                    self.ids = result.ids
-        else : 
-            self.ids = np.array(get_ids.ids)
-        return
+    def refresh_ids(self):
+        refresh_ids_req = Trigger.Request()
+        future = self.get_ids_cli.call_async(refresh_ids_req)
+        return future
     
     def create_handlers(self):
         for id in self.ids :
             self.handlers.append(bot_handler(id))
         return
     
-    async def get_tasks(self):
+    def handlers_get_tasks(self):
         for bot in self.handlers :
-            bot.get_task()
+            bot.ask_task()
     
-    def send_goals(self):
+    def handlers_send_goals(self):
         for bot in self.handlers :
             bot.send_goal()
-    def spin_until_futur_handlers(self, executor):
+
+    def handlers_spin_until_futur_handlers(self, executor):
+        for bot in self.handlers :
+            executor.spin_until_future_complete(bot, bot.future)
+            bot.set_task()
+    
+    def spin_all_handlers(self, executor):
         for bot in self.handlers :
             executor.add_node(bot)
         executor.spin()
+    
+    def init_handlers(self):
+        for bot in self.handlers :
+            bot.init_wayposes()
+
+            
+            
 
 class bot_handler(Node):
     def __init__(self, sycabot_id):
         super().__init__(f"SycaBot_W{sycabot_id}_handler")
         self.id = sycabot_id
+        self.rob_state = np.array([False,False,False])
+        self.wayposes, self.wayposes_times = [],[]
         
         # Define action client for MPC control
         self._action_client = ActionClient(self, Control, f'/SycaBot_W{self.id}/MPC_start_control')
@@ -89,37 +87,52 @@ class bot_handler(Node):
         self.get_task_cli = self.create_client(Task, 'task_srv')
         while not self.get_task_cli.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('Get task service not available, waiting again...\n')
+        # Create pose subscriber
+        self.pose_sub = self.create_subscription(PoseStamped, f'/mocap_node/SycaBot_W{self.id}/pose', self.get_pose_cb, 1)
     
-    async def get_task(self):
+    def get_pose_cb(self, p):
+        '''
+        Get jetbot positions.
+
+        arguments :
+            p (PoseStamped) = position of the jetbots
+        ------------------------------------------------
+        return :
+        '''
+        quat = [p.pose.orientation.x, p.pose.orientation.y, p.pose.orientation.z, p.pose.orientation.w]
+        theta = quat2eul(quat)
+        self.previous_state = self.rob_state
+        self.rob_state = np.array([p.pose.position.x, p.pose.position.y, theta])
+        self.time = float(p.header.stamp.sec) + float(p.header.stamp.nanosec)*10e-10
+        return
+
+    def ask_task(self):
         task_req = Task.Request()
         task_req.id = self.id
-        self.futur = self.get_task_cli.call_async(task_req)
-
-        try :
-            task = await self.futur
-        except Exception as e:
-            self.get_logger().info('Get task of handler %d service call failed %r' % (self.id,e,))
-        
-        self.waypoint = task.task
-        self.tf = task.tf
+        self.future = self.get_task_cli.call_async(task_req)
     
+    def set_task(self):
+        self.waypoint = self.future.result().task
+        self.tf = self.future.result().tf
+    
+    def init_wayposes(self):
+        self.wayposes, self.wayposes_times = self.add_syncronised_waypose(self.wayposes, self.wayposes_times, 0., np.array([self.rob_state[0],self.rob_state[1]]), 10.)
+
     def send_goal(self):
-        self.wait4pose()
         goal_msg = Control.Goal()
         self._action_client.wait_for_server()
-
-        wayposes, wayposes_times = [],[]
-        wayposes, wayposes_times = self.add_syncronised_waypose(wayposes, wayposes_times, 0., np.array([self.waypoint.x,self.waypoint.y]), 10.)
-        print(wayposes, wayposes_times)
+        self.wait4pose()
+        self.wayposes, self.wayposes_times = self.add_syncronised_waypose(self.wayposes, self.wayposes_times, 0., np.array([self.waypoint.x,self.waypoint.y]), 10.)
+        print(self.wayposes, self.wayposes_times)
         path = []
-        for i in range(len(wayposes_times)):
+        for i in range(len(self.wayposes_times)):
             pose = Pose2D()
-            pose.x = wayposes[0,i]
-            pose.y = wayposes[1,i]
-            pose.theta = wayposes[2,i]
+            pose.x = self.wayposes[0,i]
+            pose.y = self.wayposes[1,i]
+            pose.theta = self.wayposes[2,i]
             path.append(pose)
         goal_msg.path = path
-        goal_msg.timestamps = wayposes_times.tolist()
+        goal_msg.timestamps = self.wayposes_times.tolist()
         self._send_goal_future = self._action_client.send_goal_async(goal_msg)
         self._send_goal_future.add_done_callback(self.goal_response_callback)
     
@@ -257,15 +270,34 @@ class bot_handler(Node):
         input_ref = np.vstack((v_ref[:-1].reshape(1,N), omega_ref[:-1].reshape(1,N)))
         return state_ref, input_ref
 
+    def wait4pose(self):
+        # Initialisation : Wait for pose
+        while not np.all(self.rob_state) :
+                time.sleep(0.1)
+                self.get_logger().info('No pose yet, waiting again...\n')
 
-async def main(args=None):
+        return
+
+def main(args=None):
     rclpy.init(args=args)
     executor = MultiThreadedExecutor()
     Central = central()
-    await Central.get_ids()
-    await Central.get_tasks()
-    Central.send_goals()
-    Central.spin_until_futur_handlers(executor)
+    future = Central.get_ids()
+    rclpy.spin_until_future_complete(Central, future)
+    while not future.result().success :
+        future = Central.refresh_ids()
+        rclpy.spin_until_future_complete(Central, future)
+        future = Central.get_ids()
+        rclpy.spin_until_future_complete(Central, future)
+    
+    Central.ids = future.result().ids
+    Central.create_handlers()
+    Central.handlers_get_tasks()
+    Central.handlers_spin_until_futur_handlers(rclpy)
+    Central.init_handlers()
+    Central.handlers_send_goals()
+    Central.spin_all_handlers(executor)
+
 
 
 if __name__ == '__main__':
