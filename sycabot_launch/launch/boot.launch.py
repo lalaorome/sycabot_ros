@@ -1,3 +1,4 @@
+import launch
 from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -9,7 +10,8 @@ SYCABOT_ID = 1
 
 def generate_launch_description():
 
-    description = []
+    description = [launch.actions.DeclareArgument(name='log_level', default_value='info')]
+
 
     DeadzoneActionServer = Node(
         package= 'sycabot_identification',
@@ -17,7 +19,8 @@ def generate_launch_description():
         executable= 'DeadzoneActionServer',
         output = 'screen',
         emulate_tty=True,
-        parameters=['config/params_identification.yaml']
+        parameters=['config/params_identification.yaml'],
+        arguments=['--ros-args', '--log-level', LaunchConfiguration('log_level')],
     )
 
     IdentificationActionServer = Node(
@@ -26,7 +29,8 @@ def generate_launch_description():
         executable= 'IdentificationActionServer',
         output = 'screen',
         emulate_tty=True,
-        parameters=['config/params_identification.yaml']
+        parameters=['config/params_identification.yaml'],
+        arguments=['--ros-args', '--log-level', LaunchConfiguration('log_level')],
     )
 
     MPCActionServer = Node(
@@ -36,6 +40,7 @@ def generate_launch_description():
         output = 'screen',
         emulate_tty=True,
         parameters=['config/params_identification.yaml'],
+        arguments=['--ros-args', '--log-level', LaunchConfiguration('log_level')],
     )
 
     PPCtrllerActionServer = Node(
@@ -45,6 +50,7 @@ def generate_launch_description():
         output = 'screen',
         emulate_tty=True,
         parameters=['config/params_identification.yaml'],
+        arguments=['--ros-args', '--log-level', LaunchConfiguration('log_level')],
     )
     motors = Node(
         package= 'sycabot_base',
@@ -52,6 +58,7 @@ def generate_launch_description():
         executable= 'motors',
         output = 'screen',
         emulate_tty=True,
+        arguments=['--ros-args', '--log-level', LaunchConfiguration('log_level')],
     )
 
     beaconClient = Node(
@@ -60,6 +67,7 @@ def generate_launch_description():
         output = 'screen',
         emulate_tty=True,
         parameters=['config/params_identification.yaml'],
+        arguments=['--ros-args', '--log-level', LaunchConfiguration('log_level')],
     )
 
     description.append(IdentificationActionServer)

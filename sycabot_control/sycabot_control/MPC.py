@@ -82,7 +82,7 @@ class MPC(CtrllerActionServer):
         x_pf = x0
         u0 = np.zeros(2,)
         while t_run < 150. or t_run>wayposes[-1]:
-            
+            print(t_run, wayposes_times[-1])
             t_loop = time.time()
             # update initial condition
             previous_x0 = x0
