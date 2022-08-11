@@ -16,7 +16,7 @@ class MotorController(Node):
     or any node that subscribes to the /jetbot/cmd_vel Twist message.
     """
     def __init__(self):
-        super().__init__('motors', namespace = 'Sycabot_W1')
+        super().__init__('motors')
         qos = qos_profile_sensor_data
         
         self.declare_parameter('id', 1)
