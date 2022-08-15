@@ -3,6 +3,8 @@ from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.action import ActionClient
 
+from rclpy.qos import qos_profile_sensor_data
+from rclpy.callback_groups import ReentrantCallbackGroup
 
 
 from sycabot_interfaces.srv import BeaconSrv, Task
@@ -80,7 +82,8 @@ class bot_handler(Node):
         self.id = sycabot_id
         self.rob_state = np.array([False,False,False])
         self.wayposes, self.wayposes_times = [],[]
-        
+        qos = qos_profile_sensor_data
+        cb_group = ReentrantCallbackGroup()
         # Define action client for MPC control
         self._action_client = ActionClient(self, Control, f'/SycaBot_W{self.id}/MPC_start_control')
         # Define get task service client
@@ -88,7 +91,7 @@ class bot_handler(Node):
         while not self.get_task_cli.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('Get task service not available, waiting again...\n')
         # Create pose subscriber
-        self.pose_sub = self.create_subscription(PoseStamped, f'/mocap_node/SycaBot_W{self.id}/pose', self.get_pose_cb, 1)
+        self.pose_sub = self.create_subscription(PoseStamped, f'/mocap_node/SycaBot_W{self.id}/pose', self.get_pose_cb, qos, callback_group=cb_group)
     
     def get_pose_cb(self, p):
         '''
@@ -116,14 +119,13 @@ class bot_handler(Node):
         self.tf = self.future.result().tf
     
     def init_wayposes(self):
-        self.wayposes, self.wayposes_times = self.add_syncronised_waypose(self.wayposes, self.wayposes_times, 0., np.array([self.rob_state[0],self.rob_state[1]]), 10.)
+        self.wayposes, self.wayposes_times = self.add_syncronised_waypose(self.wayposes, self.wayposes_times, 0., np.array([self.rob_state[0],self.rob_state[1]]), self.tf)
 
     def send_goal(self):
         goal_msg = Control.Goal()
         self._action_client.wait_for_server()
         self.wait4pose()
-        self.wayposes, self.wayposes_times = self.add_syncronised_waypose(self.wayposes, self.wayposes_times, 0., np.array([self.waypoint.x,self.waypoint.y]), 10.)
-        print(self.wayposes, self.wayposes_times)
+        self.wayposes, self.wayposes_times = self.add_syncronised_waypose(self.wayposes, self.wayposes_times, 0., np.array([self.waypoint.x,self.waypoint.y]), self.tf)
         path = []
         for i in range(len(self.wayposes_times)):
             pose = Pose2D()
@@ -273,14 +275,13 @@ class bot_handler(Node):
     def wait4pose(self):
         # Initialisation : Wait for pose
         while not np.all(self.rob_state) :
-                time.sleep(0.1)
-                self.get_logger().info('No pose yet, waiting again...\n')
+            time.sleep(0.01)
+            self.get_logger().info('No pose yet, waiting again...\n')
 
         return
 
 def main(args=None):
     rclpy.init(args=args)
-    executor = MultiThreadedExecutor()
     Central = central()
     future = Central.get_ids()
     rclpy.spin_until_future_complete(Central, future)
@@ -289,7 +290,7 @@ def main(args=None):
         rclpy.spin_until_future_complete(Central, future)
         future = Central.get_ids()
         rclpy.spin_until_future_complete(Central, future)
-    
+    executor = MultiThreadedExecutor()
     Central.ids = future.result().ids
     Central.create_handlers()
     Central.handlers_get_tasks()

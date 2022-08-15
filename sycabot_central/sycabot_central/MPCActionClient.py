@@ -4,6 +4,7 @@ from rclpy.action import ActionClient
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 
+
 from sycabot_interfaces.msg import Pose2D
 from sycabot_interfaces.action import Control
 from geometry_msgs.msg import PoseStamped
@@ -30,15 +31,36 @@ class MPCActionClient(Node):
         self.start = False
 
     def intialise(self):
+        '''
+        Initialise the MPC Action client and the pose subscriber.
+
+        arguments :
+        ------------------------------------------------
+        return :
+        '''
         cb_group = ReentrantCallbackGroup()
         self._action_client = ActionClient(self, Control, f'/SycaBot_W{self.Sycabot_id}/MPC_start_control', callback_group=cb_group)
         self.pose_sub = self.create_subscription(PoseStamped, f'/mocap_node/SycaBot_W{self.Sycabot_id}/pose', self.get_pose_cb, 1, callback_group=cb_group)
     
     def destroy_links(self):
+        '''
+        Destroy the MPC Action client and the pose subscriber.
+
+        arguments :
+        ------------------------------------------------
+        return :
+        '''
         self._action_client.destroy()
         self.pose_sub.destroy()
 
     def parameters_callback(self, params):
+        '''
+        Parameter callback. Called when parameters are modified.
+
+        arguments :
+        ------------------------------------------------
+        return :
+        '''
         for param in params :
             if param.name == 'id' :
                 self.Sycabot_id = self.param.value
@@ -67,6 +89,14 @@ class MPCActionClient(Node):
         return
 
     def send_goal(self):
+        '''
+        Send a goal request to the MPC Action Client.
+        Compute a path of wayposes and their synchronized times. 
+
+        arguments :
+        ------------------------------------------------
+        return :
+        '''
         self.wait4pose()
         goal_msg = Control.Goal()
         self._action_client.wait_for_server()
@@ -75,7 +105,7 @@ class MPCActionClient(Node):
         init_pose.x = self.rob_state[0]
         init_pose.y = self.rob_state[1]
         init_pose.theta = self.rob_state[2]
-        path = self.create_tajectory_randpoints()
+        path = self.create_tajectory_frompoints()
         path.insert(0,init_pose)
 
         wayposes, wayposes_times = [],[]
@@ -96,6 +126,14 @@ class MPCActionClient(Node):
         self._send_goal_future.add_done_callback(self.goal_response_callback)
 
     def goal_response_callback(self, future):
+        '''
+        Called when there is a response from the MPC Action server. 
+        Do nothing for now.
+
+        arguments :
+        ------------------------------------------------
+        return :
+        '''
         goal_handle = future.result()
         if not goal_handle.accepted:
             self.get_logger().info('Goal rejected :(')
@@ -107,11 +145,27 @@ class MPCActionClient(Node):
         self._get_result_future.add_done_callback(self.get_result_callback)
 
     def get_result_callback(self, future):
+        '''
+        Called when there is a result from the MPC Action server. 
+        Do nothing for now.
+
+        arguments :
+        ------------------------------------------------
+        return :
+        '''
         result = future.result().result
         self.get_logger().info('Result: {0}'.format(result.success))
         rclpy.shutdown()
 
-    def create_tajectory_randpoints(self):
+    def create_tajectory_frompoints(self):
+        '''
+        Create a path of pose2D from the points defined on the floor.
+
+        arguments :
+        ------------------------------------------------
+        return :
+            poses (list) : List of pose2D points.
+        '''
         poses = []
         points = [[0.,0.],[-1.352, -0.840], [-0.088,1.409],[1.306,-0.948],[0.869,2.150],[-1.155,2.208],[-0.067,-1.547],[0.,-0.4],[0.3,0.],[0.,0.]]
         for p in points :
@@ -122,6 +176,21 @@ class MPCActionClient(Node):
         return poses
 
     def add_syncronised_waypose(self, current_poses, current_waypose_times, current_t,next_waypoint,next_travel_duration):
+        '''
+        Add the time to the wayposes.
+        Remove the past wayposes.
+
+        arguments :
+            current_poses (np.array) [3,N] : Current list of wayposes
+            current_wayposes_times (list) [N] : Current list of synchronized times
+            current_t (float64) : Current time
+            next_waypoint (np.array) [x,y] : Next waypoint to add to the wayposes
+            next_travel_duration (float64) : Completion time to go to the next waypoint
+        ------------------------------------------------
+        return :
+            new_poses (np.array) [3,N+1] : Updated list of wayposes with the next waypoint
+            new_times (list) [N+1] : updated list of synchronized times with the next travel duration
+        '''
         
         new_poses = np.zeros((3,1))
         new_poses[:2,0] = next_waypoint[:2]
@@ -167,84 +236,21 @@ class MPCActionClient(Node):
                 new_times[W + 2 + ts] = new_times[W + 2 + ts - 1] + 0.5
         
         return new_poses, new_times
+
     def wait4pose(self):
+        '''
+        Wait for the pose to be published.
+
+        arguments :
+        ------------------------------------------------
+        return :
+        '''
         # Initialisation : Wait for pose
         while not np.all(self.rob_state) :
                 time.sleep(0.1)
                 self.get_logger().info('No pose yet, waiting again...\n')
 
         return
-    def generate_reference_trajectory_from_timed_wayposes(self, current_state, wayposes, waypose_times,t,Ts,N,mode = 'go_straight_or_turn'):
-        x_pos_ref = np.ones(N + 1)*current_state[0]
-        y_pos_ref = np.ones(N  + 1)*current_state[1]
-        theta_ref = np.ones(N  + 1)*current_state[2]
-        v_ref = np.zeros(N + 1)
-        omega_ref = np.zeros(N + 1)
-        
-        if mode == 'ignore_corners':
-            t_vec = t + np.linspace(0,N * Ts, N + 1)
-            for k in range(N + 1):
-                idx_poses_after_t = np.argwhere(waypose_times > t_vec[k])
-                if idx_poses_after_t.size > 0:
-                    idx_k = idx_poses_after_t[0]
-                    if idx_k > 0:
-                        v_ref[k] = np.sqrt((wayposes[1,idx_k] - wayposes[1,idx_k - 1]) ** 2 + (wayposes[0,idx_k] - wayposes[0,idx_k - 1]) ** 2) / (waypose_times[idx_k] - waypose_times[idx_k - 1])
-                        theta_ref[k] = np.arctan2(wayposes[1,idx_k] - wayposes[1,idx_k - 1], wayposes[0,idx_k] - wayposes[0,idx_k - 1])
-                        l = (t_vec[k] - waypose_times[idx_k - 1]) / (waypose_times[idx_k] - waypose_times[idx_k - 1])
-                        x_pos_ref[k] = l * wayposes[0,idx_k] + (1 - l) * wayposes[0,idx_k - 1]
-                        y_pos_ref[k] = l * wayposes[1,idx_k] + (1 - l) * wayposes[1,idx_k - 1]
-        
-        if mode == 'stop_in_corners':
-            t_vec = t + np.linspace(0,N * Ts, N + 1)
-            for k in range(N + 1):
-                idx_poses_after_t = np.argwhere(waypose_times > t_vec[k])
-                if idx_poses_after_t.size > 0:
-                    idx_k = idx_poses_after_t[0]
-                    if idx_k > 0:
-                        v_ref[k] = np.sqrt((wayposes[1,idx_k] - wayposes[1,idx_k - 1]) ** 2 + (wayposes[0,idx_k] - wayposes[0,idx_k - 1]) ** 2) / (waypose_times[idx_k] - waypose_times[idx_k - 1])
-                        if np.remainder(idx_k,2) == 0:
-                            l = (t_vec[k] - waypose_times[idx_k - 1]) / (waypose_times[idx_k] - waypose_times[idx_k - 1])
-                            theta_ref[k] = np.arctan2(wayposes[1,idx_k] - wayposes[1,idx_k - 1], wayposes[0,idx_k] - wayposes[0,idx_k - 1])
-                            x_pos_ref[k] = l * wayposes[0,idx_k] + (1 - l) * wayposes[0,idx_k - 1]
-                            y_pos_ref[k] = l * wayposes[1,idx_k] + (1 - l) * wayposes[1,idx_k - 1]
-                        else:
-                            x_pos_ref[k] = wayposes[0,idx_k - 1]
-                            y_pos_ref[k] = wayposes[1,idx_k - 1]
-                            l_rot = (t_vec[k] - waypose_times[idx_k - 1]) / (waypose_times[idx_k] - waypose_times[idx_k - 1])
-                            # print(l_rot)
-                            theta_ref[k]  = wayposes[2,idx_k - 1] + l_rot *  np.arctan2(np.sin(wayposes[2,idx_k] - wayposes[2,idx_k - 1]),np.cos(wayposes[2,idx_k] - wayposes[2,idx_k - 1]))
-                            omega_ref[k] = np.arctan2(np.sin(wayposes[2,idx_k] - wayposes[2,idx_k - 1]),np.cos(wayposes[2,idx_k] - wayposes[2,idx_k - 1])) / (waypose_times[idx_k] - waypose_times[idx_k - 1])
-                    else:
-                        v_ref[k] = np.sqrt((wayposes[1,idx_k] - wayposes[1,idx_k - 1]) ** 2 + (wayposes[0,idx_k] - wayposes[0,idx_k - 1]) ** 2) / (waypose_times[idx_k] - waypose_times[idx_k - 1])
-        
-        if mode == 'go_straight_or_turn':
-            t_vec = t + np.linspace(0,N * Ts, N + 1)
-            for k in range(N + 1):
-                idx_poses_after_t = np.argwhere(waypose_times > t_vec[k])
-                if idx_poses_after_t.size > 0:
-                    idx_k = idx_poses_after_t[0]
-                    if idx_k > 0:
-                        v_ref[k] = np.sqrt((wayposes[1,idx_k] - wayposes[1,idx_k - 1]) ** 2 + (wayposes[0,idx_k] - wayposes[0,idx_k - 1]) ** 2) / (waypose_times[idx_k] - waypose_times[idx_k - 1])
-                        if v_ref[k] != 0:
-                            l = (t_vec[k] - waypose_times[idx_k - 1]) / (waypose_times[idx_k] - waypose_times[idx_k - 1])
-                            theta_ref[k] = np.arctan2(wayposes[1,idx_k] - wayposes[1,idx_k - 1], wayposes[0,idx_k] - wayposes[0,idx_k - 1])
-                            x_pos_ref[k] = l * wayposes[0,idx_k] + (1 - l) * wayposes[0,idx_k - 1]
-                            y_pos_ref[k] = l * wayposes[1,idx_k] + (1 - l) * wayposes[1,idx_k - 1]
-                        else:
-                            x_pos_ref[k] = wayposes[0,idx_k - 1]
-                            y_pos_ref[k] = wayposes[1,idx_k - 1]
-                            l_rot = (t_vec[k] - waypose_times[idx_k - 1]) / (waypose_times[idx_k] - waypose_times[idx_k - 1])
-                            # print(l_rot)
-                            theta_ref[k]  = wayposes[2,idx_k - 1] + l_rot *  np.arctan2(np.sin(wayposes[2,idx_k] - wayposes[2,idx_k - 1]),np.cos(wayposes[2,idx_k] - wayposes[2,idx_k - 1]))
-                            omega_ref[k] = np.arctan2(np.sin(wayposes[2,idx_k] - wayposes[2,idx_k - 1]),np.cos(wayposes[2,idx_k] - wayposes[2,idx_k - 1])) / (waypose_times[idx_k] - waypose_times[idx_k - 1])
-                    else:
-                        v_ref[k] = np.sqrt((wayposes[1,idx_k] - wayposes[1,idx_k - 1]) ** 2 + (wayposes[0,idx_k] - wayposes[0,idx_k - 1]) ** 2) / (waypose_times[idx_k] - waypose_times[idx_k - 1])
-
-
-        state_ref = np.vstack((x_pos_ref.reshape(1,N + 1), y_pos_ref.reshape(1,N + 1), theta_ref.reshape(1,N + 1)))
-        input_ref = np.vstack((v_ref[:-1].reshape(1,N), omega_ref[:-1].reshape(1,N)))
-        return state_ref, input_ref
-
 
 
 def main(args=None):

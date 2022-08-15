@@ -44,10 +44,18 @@ class cCAPT(Node):
 
         self.get_ids()
         self.initialise_pose_acquisition()
-        self.initialise_poses()
+        self.initialise_goals()
         
 
-    def initialise_poses(self):
+    def initialise_goals(self):
+        '''
+        Generate the goals using cCAPT. 
+
+        arguments :
+        ------------------------------------------------
+        return :
+        '''
+
         while self.jb_positions is None :
             time.sleep(0.1)
             self.get_logger().info("Waiting for positions...")
@@ -55,6 +63,8 @@ class cCAPT(Node):
         N = len(self.ids)
         D=np.zeros((N,N))
         
+        robot_radius = 0.13
+        D_min = 2 * np.sqrt(2) * robot_radius
         while self.goals is None :
             goals = np.random.rand(len(self.ids),2)
             goals[:,0] = goals[:,0]*4 - 2.
@@ -69,19 +79,16 @@ class cCAPT(Node):
 
     def set_task_cb(self, request, response):
         '''
-        Compute goals if it has never been init and give it to the asking jetbot.
+        Callback for the tasks service. Sends the goal.
 
         arguments :
             request (interfaces.srv/Start.Response) =
                 id (int64) = identifier of the jetbot [1,2,3,...]
-                position (Pose) = pose of the jetbot
         ------------------------------------------------
         return :
             response (interfaces.srv/Task.Response) = 
                 task (geometry_msgs.msg/Pose) = pose of the assigned task
         '''
-        print('got demand')
-        # Step 2 : Compute and send response if id is the good one
         idx = np.where(self.ids==request.id)[0][0]
         task = Point()
         task.x = self.goals[idx,0]
@@ -92,9 +99,15 @@ class cCAPT(Node):
         response.tf = self.tf
         print(self.goals)
         return response
-        
 
     def get_ids(self):
+        '''
+        Get the IDs from the ebacon node. Call and refresh until the beacon give a success.
+
+        arguments :
+        ------------------------------------------------
+        return :
+        '''
         get_ids_req = BeaconSrv.Request()
         self.future = self.get_ids_cli.call_async(get_ids_req)
         rclpy.spin_until_future_complete(self, self.future)
@@ -105,7 +118,15 @@ class cCAPT(Node):
             rclpy.spin_until_future_complete(self, self.future)
         self.ids = np.array(self.future.result().ids)
         return
+
     def refresh_ids(self):
+        '''
+        Refresh the IDs of the beacon node.
+
+        arguments :
+        ------------------------------------------------
+        return :
+        '''
         refresh_ids_req = Trigger.Request()
         self.future = self.get_ids_cli.call_async(refresh_ids_req)
         rclpy.spin_until_future_complete(self, self.future)
@@ -133,8 +154,7 @@ class cCAPT(Node):
         # Step 3 : Compute phi_star using a simple optimizer
         row_idx, col_idx = linear_sum_assignment(D)
         phi[row_idx, col_idx] = 1
-        tf = max(norm(self.jb_positions[:,0:2] - self.goals[col_idx], axis=1))/vmax
-        
+        tf = max(norm(self.jb_positions[:,0:2] - self.goals[col_idx], axis=1))/vmax    
 
         # Step 4 : Compute trajectory and the task where goals[i] corresponds to jebtot[i]
         self.goals = phi@self.goals
@@ -142,6 +162,13 @@ class cCAPT(Node):
         return
     
     def initialise_pose_acquisition(self):
+        '''
+        Initialise the poses acuquistion by synchronizing all the topics and using the same callback.  
+
+        arguments :
+        ------------------------------------------------
+        return :
+        '''
         # Create sync callback group to get all the poses
         cb_group = ReentrantCallbackGroup()
         for id in self.ids:

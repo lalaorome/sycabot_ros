@@ -13,7 +13,12 @@ rigid_bodies:
     pose: SycaBot_W3/pose
     child_frame_id: SycaBot_W3/base_link
     parent_frame_id: world
-    
+
+  '4':
+    pose: SycaBot_W4/pose
+    child_frame_id: SycaBot_W4/base_link
+    parent_frame_id: world
+
   '5':
     pose: SycaBot_W5/pose
     child_frame_id: SycaBot_W5/base_link
