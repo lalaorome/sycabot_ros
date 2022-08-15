@@ -18,7 +18,7 @@ class MPCActionClient(Node):
     def __init__(self):
         super().__init__('control_action_client')
 
-        self.declare_parameter('SycaBot_id', 1)
+        self.declare_parameter('SycaBot_id', 2)
         
         self.Sycabot_id = self.get_parameter('SycaBot_id').value
 
@@ -82,6 +82,7 @@ class MPCActionClient(Node):
         for p in path:
             wayposes, wayposes_times = self.add_syncronised_waypose(wayposes, wayposes_times, 0., np.array([p.x,p.y]), 10.)
         # print(wayposes, wayposes_times)
+
         path = []
         for i in range(len(wayposes_times)):
             pose = Pose2D()
@@ -173,7 +174,7 @@ class MPCActionClient(Node):
                 self.get_logger().info('No pose yet, waiting again...\n')
 
         return
-    def generate_reference_trajectory_from_timed_wayposes(self, current_state, wayposes, waypose_times,t,Ts,N,mode = 'ignore_corners'):
+    def generate_reference_trajectory_from_timed_wayposes(self, current_state, wayposes, waypose_times,t,Ts,N,mode = 'go_straight_or_turn'):
         x_pos_ref = np.ones(N + 1)*current_state[0]
         y_pos_ref = np.ones(N  + 1)*current_state[1]
         theta_ref = np.ones(N  + 1)*current_state[2]

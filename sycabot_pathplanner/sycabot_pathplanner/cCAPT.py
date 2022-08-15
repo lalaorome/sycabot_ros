@@ -63,7 +63,7 @@ class cCAPT(Node):
                 for j in range(N):
                     D[i,j] = norm(goals[i] - goals[j])
                     if i==j : D[i,j] = 900.
-            if np.all(D>0.4) : 
+            if np.all(D>0.3) : 
                 self.goals = goals
         self.cCAPT(vmax = self.MAX_LIN_VEL, t0=0.)
 
