@@ -98,7 +98,7 @@ class GamepadActionServer(Node):
         #creates object 'gamepad' to store the data
         gamepad = InputDevice('/dev/input/event3')
         self.wait4pose()
-        centroid_idx=self.gridworld.get_centroid(self.rob_state)
+        self.centroid_idx=self.gridworld.get_centroid(self.rob_state)
         goal = None
 
         #evdev takes care of polling the controller in a loop
@@ -106,17 +106,17 @@ class GamepadActionServer(Node):
             if event.type != 0 :
                 if event.code == GAMEPAD.ARROW_UP_DOWN:
                     if event.value == GAMEPAD.ARROW_UP_PRESSED :
-                        goal = self.gridworld.get_next_goal(centroid_idx,'up')
+                        goal = self.gridworld.get_next_goal(self.centroid_idx,'up')
                         self.send_goal(goal)
                     elif event.value == GAMEPAD.ARROW_DOWN_PRESSED :
-                        goal = self.gridworld.get_next_goal(centroid_idx,'down')      
+                        goal = self.gridworld.get_next_goal(self.centroid_idx,'down')      
                         self.send_goal(goal)            
                 elif event.code == GAMEPAD.ARROW_RIGHT_LEFT :
                     if event.value == GAMEPAD.ARROW_RIGHT_PRESSED :
-                        goal = self.gridworld.get_next_goal(centroid_idx,'right')
+                        goal = self.gridworld.get_next_goal(self.centroid_idx,'right')
                         self.send_goal(goal)
                     elif event.value == GAMEPAD.ARROW_LEFT_PRESSED :
-                        goal = self.gridworld.get_next_goal(centroid_idx,'left')
+                        goal = self.gridworld.get_next_goal(self.centroid_idx,'left')
                         self.send_goal(goal)
                 else : goal = goal
 
@@ -142,7 +142,7 @@ class GamepadActionServer(Node):
         wayposes = []
         wayposes_times = []
         wayposes, wayposes_times = self.add_syncronised_waypose(wayposes, wayposes_times, 0., self.rob_state[:2], 0.)
-        wayposes, wayposes_times = self.add_syncronised_waypose(wayposes, wayposes_times, 0., goal, 0.5)
+        wayposes, wayposes_times = self.add_syncronised_waypose(wayposes, wayposes_times, 0., goal, 2.)
 
         path = []
         for i in range(len(wayposes_times)):
@@ -224,6 +224,7 @@ class GamepadActionServer(Node):
         ------------------------------------------------
         return :
         '''
+        self.centroid_idx=self.gridworld.get_centroid(self.rob_state)
         result = future.result().result
         self.get_logger().info('Result: {0}'.format(result.success))
 
