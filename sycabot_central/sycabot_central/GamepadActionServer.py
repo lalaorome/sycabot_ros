@@ -1,5 +1,5 @@
 import numpy as np
-from sycabot_utils.utilities import utilities as ut
+from sycabot_utils.utilities import quat2eul
 import time
 import math as m
 import sycabot_central.GAMEPAD as GAMEPAD
@@ -33,15 +33,12 @@ class GamepadActionServer(Node):
 
         self.declare_parameter('id', 1)
         self.declare_parameter('max_velocity', 0.3)
-        self.declare_parameter('f_coefs', [35.85760339557938, 36.162967632872])
-        self.declare_parameter('wheel_separation', 0.1016)  # 4 inches
-        self.declare_parameter('wheel_diameter', 0.060325)  # 2 3/8 inches
-
+        self.declare_parameter('grid_size', 0.01) #step size for the grid 
+        
         self.id = self.get_parameter('id').value
-        self.f_coefs = self.get_parameter('f_coefs').value
         self.max_vel = self.get_parameter('max_velocity').value
-        self.R = self.get_parameter('wheel_diameter').value/2
-        self.L = self.get_parameter('wheel_separation').value
+        self.grid_size = self.get_parameter('grid_size').value
+
 
         cb_group = ReentrantCallbackGroup()
 
@@ -51,17 +48,18 @@ class GamepadActionServer(Node):
             f'/SycaBot_W{self.id}/gamepad_control',
             self.gamepad_cb, callback_group=cb_group)
         
+        self. _action_client = ActionClient(self,Empty,f'/SycaBot_W{self.id}/gamepad_control')
+
         self.rob_state = np.array([False,False,False]) # x,y,theta: [-pi,pi]
         self.velocity = np.array([0.,0.])
         self.velocity_measured = np.array([0.,0.])
         self.previous_state  = np.array([0.,0.,0.])
-        
         # Subscribe to pose topic
-        self.pose_sub = self.create_subscription(PoseStamped, f'/mocap_node/SycaBot_W{self.id}/pose', self.get_pose_cb, 1, callback_group=cb_group)
-
+        self.pose_sub = self.create_subscription(PoseStamped, f'/mocap_node/SycaBot_W{self.id}/pose', self.get_pose_cb, 10, callback_group=cb_group)
         # Create motor publisher
         self.vel_cmd_pub = self.create_publisher(Motor, f'/SycaBot_W{self.id}/cmd_vel', 10, callback_group=cb_group)
-
+        self.start = False
+        self.init_gridworld()
 
     def get_pose_cb(self, p):
         '''
@@ -73,22 +71,33 @@ class GamepadActionServer(Node):
         return :
         '''
         quat = [p.pose.orientation.x, p.pose.orientation.y, p.pose.orientation.z, p.pose.orientation.w]
-        theta = ut.quat2eul(quat)
+        theta = quat2eul(quat)
         self.previous_state = self.rob_state
         self.rob_state = np.array([p.pose.position.x, p.pose.position.y, theta])
         self.time = float(p.header.stamp.sec) + float(p.header.stamp.nanosec)*10e-10
         self.velocity_measured = self.get_velocity()
+        if not self.start :
+            self.start_action()
+            self.start = True
         return
     
+    def start_action(self):
+        self.wait4pose()
+        goal_msg = Empty.Goal()
+        self._action_client.wait_for_server()
+        self._send_goal_future = self._action_client.send_goal_async(goal_msg)
+
     def gamepad_cb(self, goal_handle):
         #creates object 'gamepad' to store the data
-        gamepad = InputDevice('/dev/input/event18')
-
+        print('here')
+        gamepad = InputDevice('/dev/input/event3')
+        print('here')
         self.wait4pose()
 
         #evdev takes care of polling the controller in a loop
         for event in gamepad.read_loop():
             if event.type != 0 :
+                print(event.code, GAMEPAD.BUTTON_B)
                 if event.code == GAMEPAD.JOYSTICK_LEFT_UP_DOWN:
                     self.velocity[0] = (1 - event.value/GAMEPAD.JOYSTICK_MID_UDOWN)*self.max_vel
                 if event.code == GAMEPAD.JOYSTICK_RIGHT_RIGHT_LEFT:
@@ -102,6 +111,7 @@ class GamepadActionServer(Node):
                         print('Button X')
                 if event.code == GAMEPAD.BUTTON_B :
                     if event.value == GAMEPAD.BUTTON_DOWN :
+                        print('here')
                         goal_handle.succeed()
                         result = Empty.Result()
                         result.finished = True
@@ -160,16 +170,23 @@ class GamepadActionServer(Node):
         w = m.atan2(m.sin(self.rob_state[2]-self.previous_state[2]),m.cos(self.rob_state[2]-self.previous_state[2]))/self.Ts
         return np.array([v,w])
 
+    def init_gridworld(self):
+        x = np.linspace(-2,2, int(4./self.grid_size))
+        y = np.linspace(-4,4, int(8./self.grid_size))
+        xv, yv = np.meshgrid(x,y)
+        meshgrid_idx = np.transpose(np.stack((xv,yv), axis=0))
+        print(meshgrid_idx[0,-1,:])
+
 def main(args=None):
     rclpy.init(args=args)
     executor = MultiThreadedExecutor()
     node = GamepadActionServer()
-
+   
     # Initialisation : Wait for pose
     while node.rob_state[0] == 999. :
             time.sleep(0.1)
             node.get_logger().info('No pose yet, waiting again...\n')
-            rclpy.spin_once(node)
+            rclpy.spin_once(node, timeout_sec = 0.1)
     executor.add_node(node)
     try :
         executor.spin()

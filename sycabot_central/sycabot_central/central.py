@@ -72,6 +72,7 @@ class central(Node):
     def init_handlers(self):
         for bot in self.handlers :
             bot.init_wayposes()
+            bot.wait4pose()
 
             
             
@@ -91,7 +92,7 @@ class bot_handler(Node):
         while not self.get_task_cli.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('Get task service not available, waiting again...\n')
         # Create pose subscriber
-        self.pose_sub = self.create_subscription(PoseStamped, f'/mocap_node/SycaBot_W{self.id}/pose', self.get_pose_cb, qos, callback_group = cb_group)
+        self.pose_sub = self.create_subscription(PoseStamped, f'/mocap_node/SycaBot_W{self.id}/pose', self.get_pose_cb,qos, callback_group = cb_group)
     
     def get_pose_cb(self, p):
         '''
@@ -122,11 +123,9 @@ class bot_handler(Node):
         self.wayposes, self.wayposes_times = self.add_syncronised_waypose(self.wayposes, self.wayposes_times, 0., np.array([self.rob_state[0],self.rob_state[1]]), self.tf)
 
     def send_goal(self):
-        print('here', self.id)
         try :
             goal_msg = Control.Goal()
             self._action_client.wait_for_server()
-            self.wait4pose()
             self.wayposes, self.wayposes_times = self.add_syncronised_waypose(self.wayposes, self.wayposes_times, 0., np.array([self.waypoint.x,self.waypoint.y]), self.tf)
             path = []
             for i in range(len(self.wayposes_times)):
@@ -281,8 +280,9 @@ class bot_handler(Node):
     def wait4pose(self):
         # Initialisation : Wait for pose
         while not np.all(self.rob_state) :
-            time.sleep(0.01)
+            time.sleep(0.1)
             self.get_logger().info('No pose yet, waiting again...\n')
+            rclpy.spin_once(self, timeout_sec=0.1)
 
         return
 
