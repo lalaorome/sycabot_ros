@@ -74,8 +74,6 @@ class central(Node):
             bot.init_wayposes()
             bot.wait4pose()
 
-            
-            
 
 class bot_handler(Node):
     def __init__(self, sycabot_id):
@@ -136,11 +134,10 @@ class bot_handler(Node):
                 path.append(pose)
         except Exception as e :
             print(e)
-        print('here', self.id)
+        print(path)
         goal_msg.path = path
         goal_msg.timestamps = self.wayposes_times.tolist()
         self._send_goal_future = self._action_client.send_goal_async(goal_msg)
-        print('here', self.id)
         self._send_goal_future.add_done_callback(self.goal_response_callback)
     
     def goal_response_callback(self, future):

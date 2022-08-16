@@ -79,7 +79,7 @@ class MPC(CtrllerActionServer):
         x0 = self.rob_state
         x_pf = x0
         u0 = np.zeros(2,)
-        while t_run<wayposes_times[-1]:
+        while t_run<wayposes_times[-1] + 5 :
             t_loop = time.time()
             # update initial condition
             previous_x0 = x0
