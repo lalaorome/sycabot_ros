@@ -28,7 +28,7 @@ class cCAPT(Node):
         self.jb_positions = None
         self.OptiTrack_sub = []
         self.goals = None
-        cb_group = MutuallyExclusiveCallbackGroup()
+        cb_group = ReentrantCallbackGroup()
         # Define get ids service client
         self.get_ids_cli = self.create_client(BeaconSrv, 'get_list_ids')
         while not self.get_ids_cli.wait_for_service(timeout_sec=1.0):
@@ -55,14 +55,12 @@ class cCAPT(Node):
         ------------------------------------------------
         return :
         '''
-
         while self.jb_positions is None :
             time.sleep(0.1)
-            self.get_logger().info("Waiting for positions...")
-            rclpy.spin_once(self)
+            self.get_logger().info(f"Waiting for positions ...")
+            rclpy.spin_once(self, timeout_sec=0.1)
         N = len(self.ids)
         D=np.zeros((N,N))
-        
         robot_radius = 0.13
         D_min = 2 * np.sqrt(2) * robot_radius
         while self.goals is None :

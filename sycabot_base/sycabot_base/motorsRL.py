@@ -37,7 +37,7 @@ class MotorController(Node):
         
         self.add_on_set_parameters_callback(self.parameters_callback)
 
-        self.sub = self.create_subscription(Motor, f'/SycaBot_W{self.id}/cmd_vel', self.twist_listener, qos)
+        self.sub = self.create_subscription(Motor, f'/SycaBot_W{self.id}/cmd_vel', self.twist_listener, 10)
          
         self.last_x = -999
         self.last_rot = -999

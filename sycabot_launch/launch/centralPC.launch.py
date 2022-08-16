@@ -14,19 +14,16 @@ from launch_ros.actions import PushRosNamespace
 
 def generate_launch_description():
 
-    n_sycabots = int(input('number of sycabots ?'))
-
     description = []
     id = DeclareLaunchArgument('id', default_value=TextSubstitution(text="1"))
     description.append(id)
 
-    for i in range(n_sycabots):
-        description.append(IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(
-                os.path.join(
-                    get_package_share_directory('sycabot_launch'),
-                    'robot.launch.py')),
-            launch_arguments = {"id": TextSubstitution(text=str(i+1))}.items(),
-        ))
+    description.append(IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(
+                get_package_share_directory('sycabot_launch'),
+                'robot.launch.py')),
+        launch_arguments = {"id":  LaunchConfiguration('id')}.items(),
+    ))
     
     return LaunchDescription(description)

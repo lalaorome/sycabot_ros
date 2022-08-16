@@ -65,9 +65,7 @@ class MPC(CtrllerActionServer):
         for i in range(len(wayposes_times)):
             wayposes.append([path[i].x,path[i].y,path[i].theta])
         wayposes = np.transpose(wayposes)
-        wayposes_times = np.array(wayposes_times)
-        print(wayposes, wayposes_times)
-        
+        wayposes_times = np.array(wayposes_times)        
 
         # [state_plot, input_plot] = self.get_reference(0,0.1,200)
         
@@ -126,7 +124,7 @@ class MPC(CtrllerActionServer):
             # x0 = ocp_solver.get(0, "x")
             u0 = ocp_solver.get(0, "u")
             t_solver_finished = time.time()
-            self.get_logger().info(f"Solver time is {t_solver_finished - t_loop}s")
+            # self.get_logger().info(f"Solver time is {t_solver_finished - t_loop}s")
             # self.get_logger().info(f"Control input : {u0}")
             Vr,Vl = self.velocities2wheelinput(u0[0],u0[1])
             self.sendVelCmd(Vr,Vl)
@@ -137,7 +135,7 @@ class MPC(CtrllerActionServer):
             self.viz_pathref_pub.publish(path_ref)
             t_publishing_finished = time.time()
             time.sleep(max(Ts_MPC - (t_publishing_finished - t_loop),0))
-            self.get_logger().info(f"Publishing time is {t_publishing_finished - t_solver_finished}s")
+            # self.get_logger().info(f"Publishing time is {t_publishing_finished - t_solver_finished}s")
             t_run = time.time() - t_init
             # upred = np.zeros((nu,N))
             # xpred  = np.zeros((nx,N + 1))

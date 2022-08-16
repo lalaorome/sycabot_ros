@@ -91,7 +91,7 @@ class bot_handler(Node):
         while not self.get_task_cli.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('Get task service not available, waiting again...\n')
         # Create pose subscriber
-        self.pose_sub = self.create_subscription(PoseStamped, f'/mocap_node/SycaBot_W{self.id}/pose', self.get_pose_cb, qos, callback_group=cb_group)
+        self.pose_sub = self.create_subscription(PoseStamped, f'/mocap_node/SycaBot_W{self.id}/pose', self.get_pose_cb, qos, callback_group = cb_group)
     
     def get_pose_cb(self, p):
         '''
@@ -122,23 +122,30 @@ class bot_handler(Node):
         self.wayposes, self.wayposes_times = self.add_syncronised_waypose(self.wayposes, self.wayposes_times, 0., np.array([self.rob_state[0],self.rob_state[1]]), self.tf)
 
     def send_goal(self):
-        goal_msg = Control.Goal()
-        self._action_client.wait_for_server()
-        self.wait4pose()
-        self.wayposes, self.wayposes_times = self.add_syncronised_waypose(self.wayposes, self.wayposes_times, 0., np.array([self.waypoint.x,self.waypoint.y]), self.tf)
-        path = []
-        for i in range(len(self.wayposes_times)):
-            pose = Pose2D()
-            pose.x = self.wayposes[0,i]
-            pose.y = self.wayposes[1,i]
-            pose.theta = self.wayposes[2,i]
-            path.append(pose)
+        print('here', self.id)
+        try :
+            goal_msg = Control.Goal()
+            self._action_client.wait_for_server()
+            self.wait4pose()
+            self.wayposes, self.wayposes_times = self.add_syncronised_waypose(self.wayposes, self.wayposes_times, 0., np.array([self.waypoint.x,self.waypoint.y]), self.tf)
+            path = []
+            for i in range(len(self.wayposes_times)):
+                pose = Pose2D()
+                pose.x = self.wayposes[0,i]
+                pose.y = self.wayposes[1,i]
+                pose.theta = self.wayposes[2,i]
+                path.append(pose)
+        except Exception as e :
+            print(e)
+        print('here', self.id)
         goal_msg.path = path
         goal_msg.timestamps = self.wayposes_times.tolist()
         self._send_goal_future = self._action_client.send_goal_async(goal_msg)
+        print('here', self.id)
         self._send_goal_future.add_done_callback(self.goal_response_callback)
     
     def goal_response_callback(self, future):
+        print('here', self.id)
         goal_handle = future.result()
         if not goal_handle.accepted:
             self.get_logger().info('Goal rejected :(')
@@ -152,7 +159,6 @@ class bot_handler(Node):
     def get_result_callback(self, future):
         result = future.result().result
         self.get_logger().info('Result: {0}'.format(result.success))
-        rclpy.shutdown()
 
     def add_syncronised_waypose(self, current_poses, current_waypose_times, current_t,next_waypoint,next_travel_duration):
         
