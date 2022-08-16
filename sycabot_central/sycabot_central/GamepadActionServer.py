@@ -31,11 +31,11 @@ class GamepadActionServer(Node):
     ANGULAR = 1
 
     def __init__(self):
-        super().__init__('controller')
+        super().__init__('Gamepad_controller')
 
         self.declare_parameter('id', 1)
         self.declare_parameter('max_velocity', 0.3)
-        self.declare_parameter('grid_size', 0.005) #step size for the grid 
+        self.declare_parameter('grid_size', 0.1) #step size for the grid 
         
         self.id = self.get_parameter('id').value
         self.max_vel = self.get_parameter('max_velocity').value
