@@ -71,8 +71,8 @@ class central(Node):
     
     def init_handlers(self):
         for bot in self.handlers :
-            bot.init_wayposes()
             bot.wait4pose()
+            bot.init_wayposes()
 
 
 class bot_handler(Node):
@@ -124,6 +124,8 @@ class bot_handler(Node):
         try :
             goal_msg = Control.Goal()
             self._action_client.wait_for_server()
+            print(self.tf)
+
             self.wayposes, self.wayposes_times = self.add_syncronised_waypose(self.wayposes, self.wayposes_times, 0., np.array([self.waypoint.x,self.waypoint.y]), self.tf)
             path = []
             for i in range(len(self.wayposes_times)):
@@ -135,6 +137,7 @@ class bot_handler(Node):
         except Exception as e :
             print(e)
         print(path)
+        print(self.wayposes_times)
         goal_msg.path = path
         goal_msg.timestamps = self.wayposes_times.tolist()
         self._send_goal_future = self._action_client.send_goal_async(goal_msg)

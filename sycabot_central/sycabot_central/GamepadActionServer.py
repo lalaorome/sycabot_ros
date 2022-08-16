@@ -35,7 +35,7 @@ class GamepadActionServer(Node):
 
         self.declare_parameter('id', 1)
         self.declare_parameter('max_velocity', 0.3)
-        self.declare_parameter('grid_size', 0.1) #step size for the grid 
+        self.declare_parameter('grid_size', 0.5) #step size for the grid 
         
         self.id = self.get_parameter('id').value
         self.max_vel = self.get_parameter('max_velocity').value
@@ -141,7 +141,8 @@ class GamepadActionServer(Node):
         self._action_client.wait_for_server()
         wayposes = []
         wayposes_times = []
-        wayposes, wayposes_times = self.add_syncronised_waypose(wayposes, wayposes_times, 0., goal, 1.)
+        wayposes, wayposes_times = self.add_syncronised_waypose(wayposes, wayposes_times, 0., self.rob_state[:2], 0.)
+        wayposes, wayposes_times = self.add_syncronised_waypose(wayposes, wayposes_times, 0., goal, 0.5)
 
         path = []
         for i in range(len(wayposes_times)):
@@ -151,6 +152,7 @@ class GamepadActionServer(Node):
             pose.theta = wayposes[2,i]
             path.append(pose)
         print(path)
+        print(wayposes_times)
         goal_msg.path = path
         goal_msg.timestamps = wayposes_times.tolist()
         self._send_goal_future = self._MPC_action_client.send_goal_async(goal_msg)
@@ -180,8 +182,8 @@ class GamepadActionServer(Node):
 
             rounds = 3
 
-            new_poses = np.zeros((3,W + 2 + rounds * 4))
-            new_times = np.zeros(W + 2 + rounds * 4)
+            new_poses = np.zeros((3,W+2))
+            new_times = np.zeros(W+2)
             new_poses[:,:W] = reduced_poses
             new_times[:W] = reduced_times
             new_poses[0,W] = reduced_poses[0,-1]
@@ -192,7 +194,7 @@ class GamepadActionServer(Node):
             new_poses[1,W + 1] = next_waypoint[1]
             new_poses[2,W + 1] = new_poses[2,W]
             new_times[W + 1] = new_times[W] + next_travel_duration
-        
+
         return new_poses, new_times
     def goal_response_callback(self, future):
         '''
