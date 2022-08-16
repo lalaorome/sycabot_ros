@@ -63,7 +63,7 @@ class CtrllerActionServer(Node):
         self.pose_sub = self.create_subscription(PoseStamped, f'/mocap_node/SycaBot_W{self.id}/pose', self.get_pose_cb, qos, callback_group=cb_group)
 
         # Create motor publisher
-        self.vel_cmd_pub = self.create_publisher(Motor, f'/SycaBot_W{self.id}/cmd_vel', qos, callback_group=cb_group)
+        self.vel_cmd_pub = self.create_publisher(Motor, f'/SycaBot_W{self.id}/cmd_vel',10, callback_group=cb_group)
 
         self.viz_pathref_pub = self.create_publisher(Pose2D, f'/SycaBot_W{self.id}/visualisation', 10)
         
