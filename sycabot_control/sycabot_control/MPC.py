@@ -28,7 +28,7 @@ class MPC(CtrllerActionServer):
     def __init__(self):
         super().__init__('MPC')
         self.declare_parameter('Q', [1.,0.,0.,0.,1.,0.,0.,0.,0.5])
-        self.declare_parameter('R', [0.4,0.,0.,0.4])
+        self.declare_parameter('R', [0.1,0.,0.,0.1])
         self.declare_parameter('M', 10.)
         self.declare_parameter('radius_safeset', 4.)
         self.declare_parameter('timesteps', 20)
