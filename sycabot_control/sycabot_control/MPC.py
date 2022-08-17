@@ -28,7 +28,7 @@ class MPC(CtrllerActionServer):
     def __init__(self):
         super().__init__('MPC')
         self.declare_parameter('Q', [1.,0.,0.,0.,1.,0.,0.,0.,0.5])
-        self.declare_parameter('R', [0.5,0.,0.,0.2])
+        self.declare_parameter('R', [0.7,0.,0.,0.4])
         self.declare_parameter('M', 10.)
         self.declare_parameter('radius_safeset', 4.)
         self.declare_parameter('timesteps', 20)
@@ -233,7 +233,7 @@ class MPC(CtrllerActionServer):
         Vx_e[:nx, :nx] = np.eye(nx)
         Vu = np.zeros((ny, nu))
         Vu[nx:,:] = np.eye(2)
-        Vr_max, Vl_max = 0.4,0.4
+        Vr_max, Vl_max = 0.6,0.6
         D = np.array([[1. / (self.f_coefs[0] * self.R), self.L / (2. * self.f_coefs[0] * self.R)], [1. / (self.f_coefs[1] * self.R), -self.L / (2. * self.f_coefs[1] * self.R)]])
 
         ocp.dims.N = self.N
@@ -327,54 +327,6 @@ class MPC(CtrllerActionServer):
                     timed_poses[2,i  * 2 + 1] = timed_poses[2,i  * 2]
                     timed_poses[3,i  * 2 + 1] = t0 + LargeTime             
         return timed_poses
-
-    def add_syncronised_waypose(self, current_poses, current_waypose_times, current_t,next_waypoint,next_travel_duration):
-        
-        new_poses = np.zeros((3,1))
-        new_poses[:2,0] = next_waypoint[:2]
-        new_poses[2] = 0.
-        new_times = np.array([current_t])
-        if np.any(current_poses):
-            idx_poses_after_t = np.argwhere(current_waypose_times > current_t)
-            if idx_poses_after_t.size > 0:
-                idx_next = idx_poses_after_t[0]
-                if idx_next > 1: #if there are more than one waypoint in list that have been passed
-                    reduced_poses = current_poses[:,idx_next - 1:]
-                    reduced_times = current_waypose_times[idx_next - 1:]
-                else:
-                    reduced_poses = current_poses
-                    reduced_times = current_waypose_times
-            else:
-                reduced_poses = current_poses
-                reduced_times = current_waypose_times
-
-            W = len(reduced_poses[0,:])    
-
-            rounds = 3
-
-            new_poses = np.zeros((3,W + 2 + rounds * 4))
-            new_times = np.zeros(W + 2 + rounds * 4)
-            print(new_times, new_poses)
-            new_poses[:,:W] = reduced_poses
-            new_times[:W] = reduced_times
-            new_poses[0,W] = reduced_poses[0,-1]
-            new_poses[1,W] = reduced_poses[1,-1]
-            new_poses[2,W] = np.arctan2(next_waypoint[1] - reduced_poses[1,-1], next_waypoint[0] - reduced_poses[0,-1])
-            new_times[W] = reduced_times[-1] + 1
-            new_poses[0,W + 1] = next_waypoint[0]
-            new_poses[1,W + 1] = next_waypoint[1]
-            new_poses[2,W + 1] = new_poses[2,W]
-            new_times[W + 1] = new_times[W] + next_travel_duration
-            
-
-            dir = np.sign(np.random.randn(1))
-            for ts in range(rounds * 4):
-                new_poses[0,W + 2 + ts] = next_waypoint[0]
-                new_poses[1,W + 2 + ts] = next_waypoint[1]
-                new_poses[2,W + 2 + ts] = np.remainder(new_poses[2,W + 2 + ts - 1] + dir * math.pi / 2 + math.pi,2 * math.pi) - math.pi
-                new_times[W + 2 + ts] = new_times[W + 2 + ts - 1] + 0.5
-        
-        return new_poses, new_times
 
     def generate_reference_trajectory_from_timed_wayposes(self, current_state, wayposes, waypose_times,t,Ts,N,mode = 'ignore_corners'):
         x_pos_ref = np.ones(N + 1)*current_state[0]

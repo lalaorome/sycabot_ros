@@ -35,7 +35,7 @@ class GamepadActionServer(Node):
 
         self.declare_parameter('id', 1)
         self.declare_parameter('max_velocity', 0.3)
-        self.declare_parameter('grid_size', 0.5) #step size for the grid 
+        self.declare_parameter('grid_size', 0.25) #step size for the grid 
         
         self.id = self.get_parameter('id').value
         self.max_vel = self.get_parameter('max_velocity').value
@@ -142,7 +142,7 @@ class GamepadActionServer(Node):
         wayposes = []
         wayposes_times = []
         wayposes, wayposes_times = self.add_syncronised_waypose(wayposes, wayposes_times, 0., self.rob_state[:2], 0.)
-        wayposes, wayposes_times = self.add_syncronised_waypose(wayposes, wayposes_times, 0., goal, 2.)
+        wayposes, wayposes_times = self.add_syncronised_waypose(wayposes, wayposes_times, 0., goal, 1.)
 
         path = []
         for i in range(len(wayposes_times)):
