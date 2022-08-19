@@ -1,23 +1,13 @@
 import rclpy
 from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
-from rclpy.action import ActionClient
 
 from rclpy.qos import qos_profile_sensor_data
 from rclpy.callback_groups import ReentrantCallbackGroup
 
-from sycabot_utils.utilities import quat2eul
-from sycabot_central.BotHandlerMPC import BotHandlerMPC
-from sycabot_interfaces.srv import BeaconSrv, Task
-from sycabot_interfaces.action import Control 
-from sycabot_interfaces.msg import Pose2D
+from sycabot_central.BotHandler import BotHandler
+from sycabot_interfaces.srv import BeaconSrv
 from std_srvs.srv import Trigger
-from geometry_msgs.msg import PoseStamped
-
-import numpy as np
-import time
-import math as m
-
 
 class central(Node):
     '''
@@ -53,15 +43,17 @@ class central(Node):
         Request a refresh of the ids from the beacon node.
         '''
         refresh_ids_req = Trigger.Request()
-        future = self.get_ids_cli.call_async(refresh_ids_req)
+        future = self.refresh_ids_cli.call_async(refresh_ids_req)
         return future
     
     def create_handlers(self):
         '''
         Create the robot handlers for all the Sycabot present. 
         '''
+        pathplanner = 'cCAPT'
+        controller = 'MPC'
         for id in self.ids :
-            self.handlers.append(BotHandlerMPC(id))
+            self.handlers.append(BotHandler(id, controller, pathplanner))
         return
     
     def handlers_get_tasks(self, executor):
@@ -87,15 +79,6 @@ class central(Node):
         for bot in self.handlers :
             executor.add_node(bot)
         executor.spin()
-    
-    def init_handlers(self):
-        '''
-        Initialise all the handlers, make them wait for their initial pose 
-        and then initialise the path with it.
-        '''
-        for bot in self.handlers :
-            bot.wait4pose()
-            bot.init_wayposes()
 
 
 def main(args=None):
@@ -112,7 +95,6 @@ def main(args=None):
     Central.ids = future.result().ids
     Central.create_handlers()
     Central.handlers_get_tasks(rclpy)
-    Central.init_handlers()
     Central.handlers_send_goals()
     Central.spin_all_handlers(executor)
 

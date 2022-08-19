@@ -277,6 +277,7 @@ class IdentificationActionServer(Node):
             for i in range(n) :
                 right.append((Vr_max*(i+1)/n)+np.sign(Vr_max)*(deadzones[self.RIGHT_WHEEL]+0.03))
                 left.append((Vl_max*(i+1)/n)+np.sign(Vl_max)*(deadzones[self.LEFT_WHEEL]+0.03))
+                
         elif input=='step' :
             for i in range(n) :
                 right.append(Vr_max)

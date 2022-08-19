@@ -23,7 +23,7 @@ import PRM_Node
 from std_srvs.srv import Trigger
 from sycabot_interfaces.srv import BeaconSrv, Task
 from geometry_msgs.msg import PoseStamped
-from geometry_msgs.msg import Point
+from sycabot_interfaces.msg import Pose2D
 
 class PRM(Node):
     MAX_LIN_VEL = 0.3
@@ -46,7 +46,7 @@ class PRM(Node):
             self.get_logger().info('Refresh ids service not available, waiting again...\n')
         
         # Create service for task request
-        self.task_srv = self.create_service(Task, 'task_srv', self.set_task_cb, callback_group=cb_group)
+        self.task_srv = self.create_service(Task, 'PRM_task_srv', self.set_task_cb, callback_group=cb_group)
 
         self.get_ids()
         self.initialise_pose_acquisition()
@@ -97,7 +97,7 @@ class PRM(Node):
 
     def initialise_destinations(self):
         N = len(self.ids)
-        destinations = zeros((N,2))
+        destinations = np.zeros((N,2))
         for rob in range(N):
             found_destination = False
             while not found_destination:
@@ -123,12 +123,13 @@ class PRM(Node):
         ------------------------------------------------
         return :
             response (interfaces.srv/Task.Response) = 
-                task (geometry_msgs.msg/Pose) = pose of the assigned task
+                task (geometry_msgs.msg/Pose2D[]) = pose of the assigned task
         '''
         idx = np.where(self.ids==request.id)[0][0]
         tasks = []
+        tfs = [] # Problem here should send angles and times
         for p in range(self.path_length[idx]):
-            task_p = Point()
+            task_p = Pose2D()
             task_p.x = self.x_path[idx,p]
             task_p.y = self.y_path[idx,p]
             task_p.z = 0.

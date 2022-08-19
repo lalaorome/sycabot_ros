@@ -23,6 +23,7 @@ setup(
             'deadzones_id = sycabot_central.DeadzoneActionClient:main',
             'identification = sycabot_central.IdentificationActionClient:main',
             'MPCcontrol = sycabot_central.MPCActionClient:main',
+            'PPcontrol = sycabot_central.PPActionClient:main',
             'gamepad = sycabot_central.GamepadActionServer:main',
             'beacon = sycabot_central.beacon:main',
             'central = sycabot_central.central:main',
