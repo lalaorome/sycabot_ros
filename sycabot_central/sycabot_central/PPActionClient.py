@@ -102,7 +102,18 @@ class PPActionClient(Node):
     def get_result_callback(self, future):
         result = future.result().result
         self.get_logger().info('Result: {0}'.format(result.success))
-        rclpy.shutdown()
+        if result.success :
+            response = input("Do you want to start again [y/n] ? ")
+            print(response)
+            while response != 'y' and response != 'n' :
+                print('Wrong input please press "y" or "n" and press Enter')
+                response = input("Do you want to start again ? [y/n]")
+            if response == 'y' :
+                print("Let's go for another ride !")
+                self.send_goal()
+            else :
+                print('Exiting...')
+                self.destroy_node()
 
     def create_tajectory_randpoints(self):
         poses = []
@@ -125,7 +136,7 @@ class PPActionClient(Node):
         # Initialisation : Wait for pose
         while not np.all(self.rob_state) :
                 self.get_logger().info('No pose yet, waiting again...\n')
-                rclpy.spin_once(self, timeout_sec=0.01)
+                rclpy.spin_once(self, timeout_sec=0.1)
 
 def main(args=None):
     rclpy.init(args=args)

@@ -22,6 +22,9 @@ plot = True
 
 
 class IdentificationActionServer(Node):
+    '''
+    This node is responsible for doing the system identification.
+    '''
     def __init__(self):
         super().__init__('identification_action_server')
 
@@ -45,7 +48,10 @@ class IdentificationActionServer(Node):
         self.RIGHT_WHEEL = 0
         self.LEFT_WHEEL = 1
 
-        self.interpolate = True
+        # This should always be True except if you launch the node from the central PC
+        # And you would like to visualize the performances of the identification.
+        # In this case the identification will not be performed and nothing will be saved.
+        self.interpolate = True 
         # information variables
         self.times = []
         self.states = []
@@ -87,6 +93,11 @@ class IdentificationActionServer(Node):
         return
     
     def identification_cb(self, goal_handle):
+        '''
+        Callback responsible for the execution of the identification action.
+        If you would
+
+        '''
         result = Identification.Result()
         n_inputs = goal_handle.request.n_inputs
         input_types = goal_handle.request.types
@@ -116,6 +127,7 @@ class IdentificationActionServer(Node):
             u2 = np.concatenate((u2, tmp_u2))
 
         time.sleep(0.5)
+        # Apply the inputs and records everythign in case of plotting
         for i in range(n_inputs):
             tic = time.time()
             self.states.append(self.rob_state)
@@ -277,7 +289,7 @@ class IdentificationActionServer(Node):
             for i in range(n) :
                 right.append((Vr_max*(i+1)/n)+np.sign(Vr_max)*(deadzones[self.RIGHT_WHEEL]+0.03))
                 left.append((Vl_max*(i+1)/n)+np.sign(Vl_max)*(deadzones[self.LEFT_WHEEL]+0.03))
-                
+
         elif input=='step' :
             for i in range(n) :
                 right.append(Vr_max)

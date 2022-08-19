@@ -143,6 +143,16 @@ class MPCActionClient(Node):
         '''
         result = future.result().result
         self.get_logger().info('Result: {0}'.format(result.success))
+        if result.success :
+            response = input("Do you want to start again ? [y/n]")
+            while response != 'y' and response != 'n' :
+                print('Wrong input please press "y" or "n" and press Enter')
+                response = input("Do you want to start again ? [y/n]")
+            if response == 'y' :
+                print("Let's go for another ride !")
+                self.send_goal()
+            else :
+                print('Exiting...')
 
     def create_tajectory_frompoints(self):
         '''
