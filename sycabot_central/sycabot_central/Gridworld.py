@@ -5,9 +5,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 class Gridworld() :
-
+    """
+    In charge of generating the grid world and giving the centroids of objects on this grid. 
+    """
     def __init__(self, gridsize: int) :
-
         self.gridsize: int = gridsize
         self.init_map()
         self.action_dict = {
@@ -18,22 +19,40 @@ class Gridworld() :
         } 
 
     def init_map(self) -> None:
-        x = np.linspace(-2,-2+self.gridsize*(ceil(4./self.gridsize)), ceil(4./self.gridsize)+1)
-        y = np.linspace(-4,-4+self.gridsize*(ceil(8./self.gridsize)), ceil(8./self.gridsize)+1)
+        '''
+        Initialise the map with exact grid step defined by the gridsize.
+        '''
+        x = np.linspace(-1.5,-1.5+self.gridsize*(ceil(3./self.gridsize)), ceil(3./self.gridsize)+1)
+        y = np.linspace(-3.5,-3.5+self.gridsize*(ceil(7./self.gridsize)), ceil(7./self.gridsize)+1)
         self.xv, self.yv = np.meshgrid(x,y, indexing='ij')
-        print(self.xv.shape)
         return
     
-    def get_centroid(self, rob_poses: np.array) -> tuple:
-        dist_arr = np.sqrt((self.xv - rob_poses[0])**2 + (self.yv - rob_poses[1])**2)
+    def get_centroid(self, position: np.array) -> tuple:
+        '''
+        Return the closest centroid from the given position
+        '''
+        # Make a distance matrix from the robot pose to all the centroids
+        dist_arr = np.sqrt((self.xv - position[0])**2 + (self.yv - position[1])**2)
+        #Get the closest centroid index
         centroid_idx = np.unravel_index(np.argmin(dist_arr, axis=None), dist_arr.shape)
-        print(centroid_idx)
         return centroid_idx
     
     def get_next_goal(self, centroid_idx: tuple, action: string):
+        '''
+        Get the next centroid based on the current centroid and the next action.
+        '''
         x = centroid_idx[0] + self.action_dict[action][0] 
         y = centroid_idx[1] + self.action_dict[action][1]
-        print(x,y)
+        # Check if out of boundaries
+        if x >= self.xv.shape[0] :
+            x = centroid_idx[0]
+        elif x < 0 :
+            x = 0
+        if y >= self.xv.shape[1] :
+            y = centroid_idx[1]
+        elif y < 0 :
+            y = 0 
+
         goal = np.array([self.xv[x,y],self.yv[x,y]])
         return goal 
 

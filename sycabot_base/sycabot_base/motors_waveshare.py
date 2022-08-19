@@ -1,6 +1,5 @@
 import rclpy
 
-from rclpy.node import Node
 from sycabot_base.motorsRL import MotorController
 
 from Adafruit_MotorHAT import Adafruit_MotorHAT

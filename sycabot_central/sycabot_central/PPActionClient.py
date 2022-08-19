@@ -13,7 +13,7 @@ import numpy as np
 import time
 import math as m
 
-class MPCActionClient(Node):
+class PPActionClient(Node):
 
     def __init__(self):
         super().__init__('control_action_client')
@@ -249,7 +249,7 @@ class MPCActionClient(Node):
 def main(args=None):
     rclpy.init(args=args)
     executor = MultiThreadedExecutor()
-    node = MPCActionClient()
+    node = PPActionClient()
     node.intialise()
     executor.add_node(node)
     try :

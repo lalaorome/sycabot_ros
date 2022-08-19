@@ -1,6 +1,7 @@
 from telnetlib import GA
 import numpy as np
 from .Gridworld import Gridworld
+from .Gamepad_recorder import recorder
 from sycabot_utils.utilities import quat2eul
 import time
 import math as m
@@ -35,16 +36,17 @@ class GamepadActionServer(Node):
 
         self.declare_parameter('id', 1)
         self.declare_parameter('max_velocity', 0.3)
-        self.declare_parameter('grid_size', 0.25) #step size for the grid 
+        self.declare_parameter('grid_size', 0.5) #step size for the grid 
         
         self.id = self.get_parameter('id').value
         self.max_vel = self.get_parameter('max_velocity').value
         self.grid_size = self.get_parameter('grid_size').value
 
         self.rob_state = np.array([False,False,False]) # x,y,theta: [-pi,pi]
-        self.current_centroid_idx = None
+        self.centroid_idx = None
         self.start = False
         self.gridworld  = Gridworld(self.grid_size)
+        self.recorder = recorder()
         self.cmd_dict = {
             'up': 0,
             'down': 1,
@@ -54,15 +56,16 @@ class GamepadActionServer(Node):
         
         cb_group = ReentrantCallbackGroup()
 
+        # Create action server for polling the gamepad inputs and generating commands base on them. 
         self._action_server = ActionServer(
             self,
             Empty,
             f'/SycaBot_W{self.id}/gamepad_control',
             self.gamepad_cb, callback_group=cb_group)
         
-        self. _action_client = ActionClient(self,Empty,f'/SycaBot_W{self.id}/gamepad_control')
+        # Create the action clients for the gamepad action and the MPC
+        self. _gamepad_action_client = ActionClient(self,Empty,f'/SycaBot_W{self.id}/gamepad_control')
         self. _MPC_action_client = ActionClient(self, Control, f'/SycaBot_W{self.id}/MPC_start_control')
-
         
         # Subscribe to pose topic
         self.pose_sub = self.create_subscription(PoseStamped, f'/mocap_node/SycaBot_W{self.id}/pose', self.get_pose_cb, 10, callback_group=cb_group)
@@ -91,10 +94,14 @@ class GamepadActionServer(Node):
     def start_action(self):
         self.wait4pose()
         goal_msg = Empty.Goal()
-        self._action_client.wait_for_server()
-        self._send_goal_future = self._action_client.send_goal_async(goal_msg)
+        self._gamepad_action_client.wait_for_server()
+        self._send_goal_future = self._gamepad_action_client.send_goal_async(goal_msg)
 
     def gamepad_cb(self, goal_handle):
+        '''
+        This is the GamepadActionServer callback, it is in charge of continously polling the Gamepad inputs and it executes the 
+        appropriate commands based on that. 
+        '''
         #creates object 'gamepad' to store the data
         gamepad = InputDevice('/dev/input/event3')
         self.wait4pose()
@@ -106,19 +113,41 @@ class GamepadActionServer(Node):
             if event.type != 0 :
                 if event.code == GAMEPAD.ARROW_UP_DOWN:
                     if event.value == GAMEPAD.ARROW_UP_PRESSED :
-                        goal = self.gridworld.get_next_goal(self.centroid_idx,'up')
+                        input = 'up'
+                        goal = self.gridworld.get_next_goal(self.centroid_idx,input)
                         self.send_goal(goal)
+                        if self.recorder.recording : self.recorder.record(input, self.centroid_idx)
                     elif event.value == GAMEPAD.ARROW_DOWN_PRESSED :
-                        goal = self.gridworld.get_next_goal(self.centroid_idx,'down')      
-                        self.send_goal(goal)            
+                        input = 'down'
+                        goal = self.gridworld.get_next_goal(self.centroid_idx,input)      
+                        self.send_goal(goal)
+                        if self.recorder.recording : self.recorder.record(input, self.centroid_idx)
                 elif event.code == GAMEPAD.ARROW_RIGHT_LEFT :
                     if event.value == GAMEPAD.ARROW_RIGHT_PRESSED :
-                        goal = self.gridworld.get_next_goal(self.centroid_idx,'right')
+                        input = 'right'
+                        goal = self.gridworld.get_next_goal(self.centroid_idx,input)
                         self.send_goal(goal)
+                        if self.recorder.recording : self.recorder.record(input, self.centroid_idx)
                     elif event.value == GAMEPAD.ARROW_LEFT_PRESSED :
-                        goal = self.gridworld.get_next_goal(self.centroid_idx,'left')
+                        input = 'left'
+                        goal = self.gridworld.get_next_goal(self.centroid_idx,input)
                         self.send_goal(goal)
-                else : goal = goal
+                        if self.recorder.recording : self.recorder.record(input, self.centroid_idx)
+                elif event.code == GAMEPAD.BUTTON_X :
+                    if event.value == GAMEPAD.BUTTON_DOWN :
+                        self.recorder.reinit_recording()
+                elif event.code == GAMEPAD.BUTTON_B :
+                    if event.value == GAMEPAD.BUTTON_DOWN :
+                        self.recorder.stop_resume_recording()
+                elif event.code == GAMEPAD.BUTTON_A :
+                    if event.value == GAMEPAD.BUTTON_DOWN :
+                        self.recorder.new_run()
+                elif event.code == GAMEPAD.BUTTON_START :
+                    if event.value == GAMEPAD.BUTTON_DOWN :
+                        self.recorder.start_recording()
+                elif event.code == GAMEPAD.BUTTON_SELECT :
+                    if event.value == GAMEPAD.BUTTON_DOWN :
+                        self.recorder.save_recording()
 
     def wait4pose(self):
         # Initialisation : Wait for pose
@@ -136,13 +165,12 @@ class GamepadActionServer(Node):
         ------------------------------------------------
         return :
         '''
-        print('here')
         goal_msg = Control.Goal()
-        self._action_client.wait_for_server()
-        wayposes = []
-        wayposes_times = []
-        wayposes, wayposes_times = self.add_syncronised_waypose(wayposes, wayposes_times, 0., self.rob_state[:2], 0.)
-        wayposes, wayposes_times = self.add_syncronised_waypose(wayposes, wayposes_times, 0., goal, 1.)
+        self._MPC_action_client.wait_for_server()
+        wayposes = np.transpose([self.rob_state])
+        wayposes_times = np.array([0.])
+        # wayposes, wayposes_times = self.add_syncronised_waypose(wayposes, wayposes_times, 0., self.rob_state[:2], 0.)
+        wayposes, wayposes_times = self.add_syncronised_waypose(wayposes, wayposes_times, 0., goal, 1.5)
 
         path = []
         for i in range(len(wayposes_times)):
@@ -151,19 +179,26 @@ class GamepadActionServer(Node):
             pose.y = wayposes[1,i]
             pose.theta = wayposes[2,i]
             path.append(pose)
-        print(path)
-        print(wayposes_times)
         goal_msg.path = path
         goal_msg.timestamps = wayposes_times.tolist()
         self._send_goal_future = self._MPC_action_client.send_goal_async(goal_msg)
         self._send_goal_future.add_done_callback(self.goal_response_callback)
     
     def add_syncronised_waypose(self, current_poses, current_waypose_times, current_t,next_waypoint,next_travel_duration):
-        
-        new_poses = np.zeros((3,1))
-        new_poses[:2,0] = next_waypoint[:2]
-        new_poses[2] = 0.
-        new_times = np.array([current_t])
+        '''
+        Add a new waypose to the current list of poses, synchronizes it in time, and makes the robot trun when it is arrived.
+        arguments :
+            current_poses [3,T] = position of the jetbots
+            current_waypose_time [T] = times corresponding to each waypose
+            current_t = current time of the execution
+            next_waypoint: next point to add to the path
+            next_travel_duration : Time to go to travel to the next waypoint
+        ------------------------------------------------
+        return :
+            new_poses [3,T] : Updated path with the next waypoint
+            new_times [T] : Updated times with the arrival time synchronized with the new waypoint 
+        '''
+            
         if np.any(current_poses):
             idx_poses_after_t = np.argwhere(current_waypose_times > current_t)
             if idx_poses_after_t.size > 0:
@@ -180,8 +215,6 @@ class GamepadActionServer(Node):
 
             W = len(reduced_poses[0,:])    
 
-            rounds = 3
-
             new_poses = np.zeros((3,W+2))
             new_times = np.zeros(W+2)
             new_poses[:,:W] = reduced_poses
@@ -189,13 +222,18 @@ class GamepadActionServer(Node):
             new_poses[0,W] = reduced_poses[0,-1]
             new_poses[1,W] = reduced_poses[1,-1]
             new_poses[2,W] = np.arctan2(next_waypoint[1] - reduced_poses[1,-1], next_waypoint[0] - reduced_poses[0,-1])
-            new_times[W] = reduced_times[-1] + 1
+            new_times[W] = reduced_times[-1] + 0.5
             new_poses[0,W + 1] = next_waypoint[0]
             new_poses[1,W + 1] = next_waypoint[1]
             new_poses[2,W + 1] = new_poses[2,W]
             new_times[W + 1] = new_times[W] + next_travel_duration
-
+        else : 
+            new_poses = np.zeros((3,1))
+            new_poses[:2,0] = next_waypoint[:2]
+            new_poses[2] = 0.
+            new_times = np.array([current_t])
         return new_poses, new_times
+
     def goal_response_callback(self, future):
         '''
         Called when there is a response from the MPC Action server. 
@@ -246,6 +284,16 @@ class GamepadActionServer(Node):
             poses.append(pose)
         return poses
 
+    def print_instructions(self):
+        line = "\n##############################################################################################################\n"
+        sentence = "Possible commands are : \n"
+        record = "\t\tstart : Start a recording.\n"
+        stop = "\t\tB : Resume or pause the current recording. It doesn't save it. It doesn't reinitialise it.\n"
+        new = "\t\tA : Start a new run to record.\n"
+        reinit="\t\tX : Reinitialise the current run recording. In case of mistake or bad behavior.\n"
+        save = "\t\tselect : Save the recording."
+        print(line + sentence + record + stop + new + reinit + save + line)
+
 def main(args=None):
     rclpy.init(args=args)
     executor = MultiThreadedExecutor()
@@ -253,7 +301,7 @@ def main(args=None):
     while not np.all(node.rob_state) :
         time.sleep(0.1)
         rclpy.spin_once(node,timeout_sec=0.1)
-   
+    node.print_instructions()
     executor.add_node(node)
     try :
         executor.spin()

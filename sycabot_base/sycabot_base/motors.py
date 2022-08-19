@@ -1,4 +1,3 @@
-import rclpy
 import math
 
 from rclpy.node import Node
@@ -14,6 +13,8 @@ class MotorController(Node):
     Abstract motor controller base node for supporting different JetBots.
     Can be extended to support any diff drive by overriding set_speed(),
     or any node that subscribes to the /jetbot/cmd_vel Twist message.
+
+    This MotorController class expects v,w (linear and angular velocities) command inputs. 
     """
     def __init__(self):
         super().__init__('motors')
