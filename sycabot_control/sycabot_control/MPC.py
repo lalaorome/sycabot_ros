@@ -28,7 +28,7 @@ class MPC(CtrllerActionServer):
     def __init__(self):
         super().__init__('MPC')
         self.declare_parameter('Q', [1.,0.,0.,0.,1.,0.,0.,0.,0.5])
-        self.declare_parameter('R', [0.5,0.,0.,0.2])
+        self.declare_parameter('R', [0.1,0.,0.,0.01])
         self.declare_parameter('M', 10.)
         self.declare_parameter('radius_safeset', 4.)
         self.declare_parameter('timesteps', 20)
@@ -66,8 +66,6 @@ class MPC(CtrllerActionServer):
             wayposes.append([path[i].x,path[i].y,path[i].theta])
         wayposes = np.transpose(wayposes)
         wayposes_times = np.array(wayposes_times)        
-
-        # [state_plot, input_plot] = self.get_reference(0,0.1,200)
         
         # set cost
         ocp_solver = self.ocp_solver
@@ -87,10 +85,8 @@ class MPC(CtrllerActionServer):
             x0[2] = np.arctan2(np.sin(x0[2] - previous_x0[2]),np.cos(x0[2] - previous_x0[2])) + previous_x0[2]
 
             # predict state after estimated delay
-            t_prediction_feedback = time.time()
             acados_integrator.set("x",x0)
             acados_integrator.set("u",u0)
-            sim_status = acados_integrator.solve()             
             x_simulated = acados_integrator.get("x") 
             x_pf[0] = x_simulated[0]
             x_pf[1] = x_simulated[1] 
@@ -121,11 +117,7 @@ class MPC(CtrllerActionServer):
 
             
             # get solution
-            # x0 = ocp_solver.get(0, "x")
             u0 = ocp_solver.get(0, "u")
-            t_solver_finished = time.time()
-            # self.get_logger().info(f"Solver time is {t_solver_finished - t_loop}s")
-            # self.get_logger().info(f"Control input : {u0}")
             Vr,Vl = self.velocities2wheelinput(u0[0],u0[1])
             self.sendVelCmd(Vr,Vl)
             path_ref = Pose2D()
@@ -135,19 +127,8 @@ class MPC(CtrllerActionServer):
             self.viz_pathref_pub.publish(path_ref)
             t_publishing_finished = time.time()
             time.sleep(max(Ts_MPC - (t_publishing_finished - t_loop),0))
-            # self.get_logger().info(f"Publishing time is {t_publishing_finished - t_solver_finished}s")
             t_run = time.time() - t_init
-            # upred = np.zeros((nu,N))
-            # xpred  = np.zeros((nx,N + 1))
-            # for k in range(N):
-            #     upred[:,k] = ocp_solver.get(k,"u")
-            #     xpred[:,k] = ocp_solver.get(k,"x")
-            # xpred[:,N] = ocp_solver.get(N,"x")
             
-            # ur_ref = 1.0 / (self.f_coefs[0] * self.R) * input_ref[0,:] + self.L / (2 * self.f_coefs[0] * self.R) * input_ref[1,:]
-            # ul_ref = 1.0 / (self.f_coefs[1] * self.R) * input_ref[0,:] - self.L / (2 * self.f_coefs[1] * self.R) * input_ref[1,:]
-            # ur_pred = 1.0 / (self.f_coefs[0] * self.R) * upred[0,:] + self.L / (2 * self.f_coefs[0] * self.R) * upred[1,:]
-            # ul_pred = 1.0 / (self.f_coefs[1] * self.R) * upred[0,:] - self.L / (2 * self.f_coefs[1] * self.R) * upred[1,:]
 
         self.stop()
         time.sleep(self.Ts)
@@ -233,7 +214,7 @@ class MPC(CtrllerActionServer):
         Vx_e[:nx, :nx] = np.eye(nx)
         Vu = np.zeros((ny, nu))
         Vu[nx:,:] = np.eye(2)
-        Vr_max, Vl_max = 0.4,0.4
+        Vr_max, Vl_max = 0.6,0.6
         D = np.array([[1. / (self.f_coefs[0] * self.R), self.L / (2. * self.f_coefs[0] * self.R)], [1. / (self.f_coefs[1] * self.R), -self.L / (2. * self.f_coefs[1] * self.R)]])
 
         ocp.dims.N = self.N
@@ -291,133 +272,12 @@ class MPC(CtrllerActionServer):
         acados_integrator_delayCompensation = AcadosSimSolver(sim_delayCompensation)
         return acados_integrator_delayCompensation
 
-    def add_time_to_wayposes(self, poses,t0,desired_speed,mode = 'ignore_corners'):
-        LargeTime = 1000
-        
-        W = len(poses)
-        timed_poses = np.zeros((4,W))
-        if mode == 'ignore_corners':
-            for i in range(W):
-                timed_poses[0,i] = poses[i].x
-                timed_poses[1,i] = poses[i].y
-                # timed_poses[2,i] = poses[i].theta
-                if i > 0:
-                    timed_poses[2,i] = np.arctan2(poses[i].y - poses[i - 1].y, poses[i].x - poses[i - 1].x)
-                    timed_poses[3,i] = timed_poses[3,i - 1] + 1 / desired_speed * np.sqrt((poses[i].y - poses[i - 1].y) ** 2 + (poses[i].x - poses[i - 1].x) ** 2)
-                else:
-                    timed_poses[2,i] = 0
-                    timed_poses[3,i] = t0
-        if mode == 'stop_in_corners':
-            timed_poses = np.zeros((4,2 * W))
-            for i in range(W):
-                timed_poses[0,i * 2] = poses[i].x
-                timed_poses[1,i * 2] = poses[i].y
-                if i > 0:
-                    timed_poses[2,i  * 2] = np.arctan2(poses[i].y - poses[i - 1].y, poses[i].x - poses[i - 1].x)
-                    timed_poses[3,i * 2] = timed_poses[3,i * 2 - 1] + 1 / desired_speed * np.sqrt((poses[i].y - poses[i - 1].y) ** 2 + (poses[i].x - poses[i - 1].x) ** 2)
-                else:
-                    timed_poses[2,0] = poses[0].theta
-                    timed_poses[3,0] = t0
-                timed_poses[0,i  * 2 + 1] = poses[i].x
-                timed_poses[1,i * 2 + 1] = poses[i].y
-                if i < W - 1:
-                    timed_poses[2,i  * 2 + 1] = np.arctan2(poses[i + 1].y - poses[i].y, poses[i + 1].x - poses[i].x)
-                    timed_poses[3,i  * 2 + 1] = timed_poses[3,i * 2] + 2 * 0.11 / (2 * desired_speed) * np.absolute(np.arctan2(np.sin(timed_poses[2,i  * 2 + 1] - timed_poses[2,i  * 2 ]),np.cos(timed_poses[2,i  * 2 + 1] - timed_poses[2,i  * 2 ])))
-                else:
-                    timed_poses[2,i  * 2 + 1] = timed_poses[2,i  * 2]
-                    timed_poses[3,i  * 2 + 1] = t0 + LargeTime             
-        return timed_poses
-
-    def add_syncronised_waypose(self, current_poses, current_waypose_times, current_t,next_waypoint,next_travel_duration):
-        
-        new_poses = np.zeros((3,1))
-        new_poses[:2,0] = next_waypoint[:2]
-        new_poses[2] = 0.
-        new_times = np.array([current_t])
-        if np.any(current_poses):
-            idx_poses_after_t = np.argwhere(current_waypose_times > current_t)
-            if idx_poses_after_t.size > 0:
-                idx_next = idx_poses_after_t[0]
-                if idx_next > 1: #if there are more than one waypoint in list that have been passed
-                    reduced_poses = current_poses[:,idx_next - 1:]
-                    reduced_times = current_waypose_times[idx_next - 1:]
-                else:
-                    reduced_poses = current_poses
-                    reduced_times = current_waypose_times
-            else:
-                reduced_poses = current_poses
-                reduced_times = current_waypose_times
-
-            W = len(reduced_poses[0,:])    
-
-            rounds = 3
-
-            new_poses = np.zeros((3,W + 2 + rounds * 4))
-            new_times = np.zeros(W + 2 + rounds * 4)
-            print(new_times, new_poses)
-            new_poses[:,:W] = reduced_poses
-            new_times[:W] = reduced_times
-            new_poses[0,W] = reduced_poses[0,-1]
-            new_poses[1,W] = reduced_poses[1,-1]
-            new_poses[2,W] = np.arctan2(next_waypoint[1] - reduced_poses[1,-1], next_waypoint[0] - reduced_poses[0,-1])
-            new_times[W] = reduced_times[-1] + 1
-            new_poses[0,W + 1] = next_waypoint[0]
-            new_poses[1,W + 1] = next_waypoint[1]
-            new_poses[2,W + 1] = new_poses[2,W]
-            new_times[W + 1] = new_times[W] + next_travel_duration
-            
-
-            dir = np.sign(np.random.randn(1))
-            for ts in range(rounds * 4):
-                new_poses[0,W + 2 + ts] = next_waypoint[0]
-                new_poses[1,W + 2 + ts] = next_waypoint[1]
-                new_poses[2,W + 2 + ts] = np.remainder(new_poses[2,W + 2 + ts - 1] + dir * math.pi / 2 + math.pi,2 * math.pi) - math.pi
-                new_times[W + 2 + ts] = new_times[W + 2 + ts - 1] + 0.5
-        
-        return new_poses, new_times
-
-    def generate_reference_trajectory_from_timed_wayposes(self, current_state, wayposes, waypose_times,t,Ts,N,mode = 'ignore_corners'):
+    def generate_reference_trajectory_from_timed_wayposes(self, current_state, wayposes, waypose_times,t,Ts,N,mode = 'go_straight_or_turn'):
         x_pos_ref = np.ones(N + 1)*current_state[0]
         y_pos_ref = np.ones(N  + 1)*current_state[1]
         theta_ref = np.ones(N  + 1)*current_state[2]
         v_ref = np.zeros(N + 1)
         omega_ref = np.zeros(N + 1)
-        
-        if mode == 'ignore_corners':
-            t_vec = t + np.linspace(0,N * Ts, N + 1)
-            for k in range(N + 1):
-                idx_poses_after_t = np.argwhere(waypose_times > t_vec[k])
-                if idx_poses_after_t.size > 0:
-                    idx_k = idx_poses_after_t[0]
-                    if idx_k > 0:
-                        v_ref[k] = np.sqrt((wayposes[1,idx_k] - wayposes[1,idx_k - 1]) ** 2 + (wayposes[0,idx_k] - wayposes[0,idx_k - 1]) ** 2) / (waypose_times[idx_k] - waypose_times[idx_k - 1])
-                        theta_ref[k] = np.arctan2(wayposes[1,idx_k] - wayposes[1,idx_k - 1], wayposes[0,idx_k] - wayposes[0,idx_k - 1])
-                        l = (t_vec[k] - waypose_times[idx_k - 1]) / (waypose_times[idx_k] - waypose_times[idx_k - 1])
-                        x_pos_ref[k] = l * wayposes[0,idx_k] + (1 - l) * wayposes[0,idx_k - 1]
-                        y_pos_ref[k] = l * wayposes[1,idx_k] + (1 - l) * wayposes[1,idx_k - 1]
-        
-        if mode == 'stop_in_corners':
-            t_vec = t + np.linspace(0,N * Ts, N + 1)
-            for k in range(N + 1):
-                idx_poses_after_t = np.argwhere(waypose_times > t_vec[k])
-                if idx_poses_after_t.size > 0:
-                    idx_k = idx_poses_after_t[0]
-                    if idx_k > 0:
-                        v_ref[k] = np.sqrt((wayposes[1,idx_k] - wayposes[1,idx_k - 1]) ** 2 + (wayposes[0,idx_k] - wayposes[0,idx_k - 1]) ** 2) / (waypose_times[idx_k] - waypose_times[idx_k - 1])
-                        if np.remainder(idx_k,2) == 0:
-                            l = (t_vec[k] - waypose_times[idx_k - 1]) / (waypose_times[idx_k] - waypose_times[idx_k - 1])
-                            theta_ref[k] = np.arctan2(wayposes[1,idx_k] - wayposes[1,idx_k - 1], wayposes[0,idx_k] - wayposes[0,idx_k - 1])
-                            x_pos_ref[k] = l * wayposes[0,idx_k] + (1 - l) * wayposes[0,idx_k - 1]
-                            y_pos_ref[k] = l * wayposes[1,idx_k] + (1 - l) * wayposes[1,idx_k - 1]
-                        else:
-                            x_pos_ref[k] = wayposes[0,idx_k - 1]
-                            y_pos_ref[k] = wayposes[1,idx_k - 1]
-                            l_rot = (t_vec[k] - waypose_times[idx_k - 1]) / (waypose_times[idx_k] - waypose_times[idx_k - 1])
-                            # print(l_rot)
-                            theta_ref[k]  = wayposes[2,idx_k - 1] + l_rot *  np.arctan2(np.sin(wayposes[2,idx_k] - wayposes[2,idx_k - 1]),np.cos(wayposes[2,idx_k] - wayposes[2,idx_k - 1]))
-                            omega_ref[k] = np.arctan2(np.sin(wayposes[2,idx_k] - wayposes[2,idx_k - 1]),np.cos(wayposes[2,idx_k] - wayposes[2,idx_k - 1])) / (waypose_times[idx_k] - waypose_times[idx_k - 1])
-                    else:
-                        v_ref[k] = np.sqrt((wayposes[1,idx_k] - wayposes[1,idx_k - 1]) ** 2 + (wayposes[0,idx_k] - wayposes[0,idx_k - 1]) ** 2) / (waypose_times[idx_k] - waypose_times[idx_k - 1])
         
         if mode == 'go_straight_or_turn':
             t_vec = t + np.linspace(0,N * Ts, N + 1)

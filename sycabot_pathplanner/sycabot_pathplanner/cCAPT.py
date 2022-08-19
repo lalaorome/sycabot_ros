@@ -1,4 +1,3 @@
-from asyncio import futures
 import rclpy
 from rclpy.node import Node
 from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
@@ -12,12 +11,11 @@ from numpy.linalg import norm
 from scipy.optimize import linear_sum_assignment, minimize
 import math as m
 import time
-import sys
 
 from std_srvs.srv import Trigger
 from sycabot_interfaces.srv import BeaconSrv, Task
+from sycabot_interfaces.msg import Pose2D
 from geometry_msgs.msg import PoseStamped
-from geometry_msgs.msg import Point
 
 class cCAPT(Node):
     MAX_LIN_VEL = 0.3
@@ -40,7 +38,7 @@ class cCAPT(Node):
             self.get_logger().info('Refresh ids service not available, waiting again...\n')
         
         # Create service for task request
-        self.task_srv = self.create_service(Task, 'task_srv', self.set_task_cb, callback_group=cb_group)
+        self.task_srv = self.create_service(Task, 'cCAPT_task_srv', self.set_task_cb, callback_group=cb_group)
 
         self.get_ids()
         self.initialise_pose_acquisition()
@@ -55,10 +53,7 @@ class cCAPT(Node):
         ------------------------------------------------
         return :
         '''
-        while self.jb_positions is None :
-            time.sleep(0.1)
-            self.get_logger().info(f"Waiting for positions ...")
-            rclpy.spin_once(self, timeout_sec=0.1)
+        self.wait4pose()
         N = len(self.ids)
         D=np.zeros((N,N))
         robot_radius = 0.13
@@ -88,14 +83,19 @@ class cCAPT(Node):
                 task (geometry_msgs.msg/Pose) = pose of the assigned task
         '''
         idx = np.where(self.ids==request.id)[0][0]
-        task = Point()
-        task.x = self.goals[idx,0]
-        task.y = self.goals[idx,1]
-        task.z = 0.
+        
+        wayposes, wayposes_times = np.transpose([self.jb_positions[idx]]), np.array([0.])
+        wayposes, wayposes_times = self.add_syncronised_waypose(wayposes, wayposes_times, 0., self.goals[idx], self.tf)
+        tasks = []
+        for i in range(len(wayposes_times)):
+            pose = Pose2D()
+            pose.x = wayposes[0,i]
+            pose.y = wayposes[1,i]
+            pose.theta = wayposes[2,i]
+            tasks.append(pose)
 
-        response.task = task
-        response.tf = self.tf
-        print(self.goals)
+        response.tasks = tasks
+        response.tfs = wayposes_times.tolist()
         return response
 
     def get_ids(self):
@@ -126,7 +126,7 @@ class cCAPT(Node):
         return :
         '''
         refresh_ids_req = Trigger.Request()
-        self.future = self.get_ids_cli.call_async(refresh_ids_req)
+        self.future = self.refresh_ids_cli.call_async(refresh_ids_req)
         rclpy.spin_until_future_complete(self, self.future)
         return
 
@@ -158,6 +158,67 @@ class cCAPT(Node):
         self.goals = phi@self.goals
         self.tf = tf
         return
+
+    def add_syncronised_waypose(self, current_poses: list, current_waypose_times: list, 
+                                current_t: float, next_waypoint: list, next_travel_duration: float):
+        '''
+        Add a new waypose to the current list of poses, synchronizes it in time, and makes the robot turn when it is arrived.
+        arguments :
+            current_poses [3,T] = position of the jetbots
+            current_waypose_time [T] = times corresponding to each waypose
+            current_t = current time of the execution
+            next_waypoint: next point to add to the path
+            next_travel_duration : Time to go to travel to the next waypoint
+        ------------------------------------------------
+        return :
+            new_poses [3,T] : Updated path with the next waypoint
+            new_times [T] : Updated times with the arrival time synchronized with the new waypoint 
+        '''
+        if np.any(current_poses):
+            idx_poses_after_t = np.argwhere(current_waypose_times > current_t)
+            if idx_poses_after_t.size > 0:
+                idx_next = idx_poses_after_t[0]
+                if idx_next > 1: #if there are more than one waypoint in list that have been passed
+                    reduced_poses = current_poses[:,idx_next - 1:]
+                    reduced_times = current_waypose_times[idx_next - 1:]
+                else:
+                    reduced_poses = current_poses
+                    reduced_times = current_waypose_times
+            else:
+                reduced_poses = current_poses
+                reduced_times = current_waypose_times
+
+            W = len(reduced_poses[0,:])    
+
+            rounds = 3
+
+            new_poses = np.zeros((3,W + 2 + rounds * 4))
+            new_times = np.zeros(W + 2 + rounds * 4)
+            new_poses[:,:W] = reduced_poses
+            new_times[:W] = reduced_times
+            new_poses[0,W] = reduced_poses[0,-1]
+            new_poses[1,W] = reduced_poses[1,-1]
+            new_poses[2,W] = np.arctan2(next_waypoint[1] - reduced_poses[1,-1], next_waypoint[0] - reduced_poses[0,-1])
+            new_times[W] = reduced_times[-1] + 1
+            new_poses[0,W + 1] = next_waypoint[0]
+            new_poses[1,W + 1] = next_waypoint[1]
+            new_poses[2,W + 1] = new_poses[2,W]
+            new_times[W + 1] = new_times[W] + next_travel_duration
+            
+
+            dir = np.sign(np.random.randn(1))
+            for ts in range(rounds * 4):
+                new_poses[0,W + 2 + ts] = next_waypoint[0]
+                new_poses[1,W + 2 + ts] = next_waypoint[1]
+                new_poses[2,W + 2 + ts] = np.remainder(new_poses[2,W + 2 + ts - 1] + dir * m.pi / 2 + m.pi,2 * m.pi) - m.pi
+                new_times[W + 2 + ts] = new_times[W + 2 + ts - 1] + 0.5
+        else :
+            new_poses = np.zeros((3,1))
+            new_poses[:2,0] = next_waypoint[:2]
+            new_poses[2] = 0.
+            new_times = np.array([current_t])
+        
+        return new_poses, new_times
     
     def initialise_pose_acquisition(self):
         '''
@@ -190,7 +251,14 @@ class cCAPT(Node):
             theta = quat2eul(quat)
             self.jb_positions = np.append(self.jb_positions, np.array([[p.pose.position.x, p.pose.position.y, theta]]), axis=0)
     
-        return            
+        return
+
+    def wait4pose(self):
+        while self.jb_positions is None :
+            time.sleep(0.1)
+            self.get_logger().info(f"Waiting for positions ...")
+            rclpy.spin_once(self, timeout_sec=0.1)
+
 
 def main(args=None):
     rclpy.init(args=args)

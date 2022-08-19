@@ -19,7 +19,7 @@ class MPCActionClient(Node):
     def __init__(self):
         super().__init__('control_action_client')
 
-        self.declare_parameter('SycaBot_id', 2)
+        self.declare_parameter('SycaBot_id', 1)
         
         self.Sycabot_id = self.get_parameter('SycaBot_id').value
 
@@ -97,7 +97,6 @@ class MPCActionClient(Node):
         ------------------------------------------------
         return :
         '''
-        self.wait4pose()
         goal_msg = Control.Goal()
         self._action_client.wait_for_server()
 
@@ -105,23 +104,12 @@ class MPCActionClient(Node):
         init_pose.x = self.rob_state[0]
         init_pose.y = self.rob_state[1]
         init_pose.theta = self.rob_state[2]
-        path = self.create_tajectory_frompoints()
+        path, times = self.create_tajectory_frompoints()
+        times.insert(0,0.)
         path.insert(0,init_pose)
 
-        wayposes, wayposes_times = [],[]
-        for p in path:
-            wayposes, wayposes_times = self.add_syncronised_waypose(wayposes, wayposes_times, 0., np.array([p.x,p.y]), 10.)
-        # print(wayposes, wayposes_times)
-
-        path = []
-        for i in range(len(wayposes_times)):
-            pose = Pose2D()
-            pose.x = wayposes[0,i]
-            pose.y = wayposes[1,i]
-            pose.theta = wayposes[2,i]
-            path.append(pose)
         goal_msg.path = path
-        goal_msg.timestamps = wayposes_times.tolist()
+        goal_msg.timestamps = times
         self._send_goal_future = self._action_client.send_goal_async(goal_msg)
         self._send_goal_future.add_done_callback(self.goal_response_callback)
 
@@ -155,7 +143,16 @@ class MPCActionClient(Node):
         '''
         result = future.result().result
         self.get_logger().info('Result: {0}'.format(result.success))
-        rclpy.shutdown()
+        if result.success :
+            response = input("Do you want to start again ? [y/n]")
+            while response != 'y' and response != 'n' :
+                print('Wrong input please press "y" or "n" and press Enter')
+                response = input("Do you want to start again ? [y/n]")
+            if response == 'y' :
+                print("Let's go for another ride !")
+                self.send_goal()
+            else :
+                print('Exiting...')
 
     def create_tajectory_frompoints(self):
         '''
@@ -167,13 +164,15 @@ class MPCActionClient(Node):
             poses (list) : List of pose2D points.
         '''
         poses = []
+        times = []
         points = [[0.,0.],[-1.352, -0.840], [-0.088,1.409],[1.306,-0.948],[0.869,2.150],[-1.155,2.208],[-0.067,-1.547],[0.,-0.4],[0.3,0.],[0.,0.]]
-        for p in points :
+        for p, i in zip(points, range(len(points))) :
             pose = Pose2D()
             pose.x = p[0]
             pose.y = p[1]
             poses.append(pose)
-        return poses
+            times.append(5.+i*5.)
+        return poses, times
 
     def add_syncronised_waypose(self, current_poses, current_waypose_times, current_t,next_waypoint,next_travel_duration):
         '''
@@ -247,8 +246,8 @@ class MPCActionClient(Node):
         '''
         # Initialisation : Wait for pose
         while not np.all(self.rob_state) :
-                time.sleep(0.1)
                 self.get_logger().info('No pose yet, waiting again...\n')
+                rclpy.spin_once(self, timeout_sec = 0.1)
 
         return
 
@@ -258,6 +257,7 @@ def main(args=None):
     executor = MultiThreadedExecutor()
     node = MPCActionClient()
     node.intialise()
+    node.wait4pose()
     executor.add_node(node)
     try :
         executor.spin()
