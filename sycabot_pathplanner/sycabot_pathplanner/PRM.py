@@ -126,6 +126,7 @@ class PRM(Node):
                 task (geometry_msgs.msg/Pose2D[]) = pose of the assigned task
         '''
         idx = np.where(self.ids==request.id)[0][0]
+        
         tasks = []
         tfs = [] # Problem here should send angles and times
         for p in range(self.path_length[idx]):
@@ -135,8 +136,10 @@ class PRM(Node):
             task_p.z = 0.
             tasks.append(task_p)
 
-        response.tasks = tasks
-        response.tf = 0.
+        tasks_augmented, times = self.add_time_to_wayposes(tasks,0.,0.25,'ignore_corners')
+
+        response.tasks = tasks_augmented
+        response.tf = times
         return response
 
     def get_ids(self):
@@ -190,6 +193,47 @@ class PRM(Node):
             self.y_path[rob,:self.path_length[rob]] = ry
         return
     
+    def add_time_to_wayposes(self, poses: list,t0,desired_speed: float,mode = 'ignore_corners'):
+        LargeTime = 1000
+        
+        W = len(poses)
+        if mode == 'ignore_corners':
+            new_poses = np.zeros((3,W))
+            times = np.zeros(W)
+            for i in range(W):
+                new_poses[0,i] = poses[i].x
+                new_poses[1,i] = poses[i].y
+                # timed_poses[2,i] = poses[i].theta
+                if i > 0:
+                    new_poses[2,i] = np.arctan2(poses[i].y - poses[i - 1].y, poses[i].x - poses[i - 1].x)
+                    times[i] = times[i - 1] + 1 / desired_speed * np.sqrt((poses[i].y - poses[i - 1].y) ** 2 + (poses[i].x - poses[i - 1].x) ** 2)
+                else:
+                    new_poses[2,i] = 0
+                    times[i] = t0
+        if mode == 'stop_in_corners':
+            new_poses = np.zeros((3,2 * W))
+            times = np.zeros(2 * W)
+            for i in range(W):
+                new_poses[0,i * 2] = poses[i].x
+                new_poses[1,i * 2] = poses[i].y
+                if i > 0:
+                    new_poses[2,i  * 2] = np.arctan2(poses[i].y - poses[i - 1].y, poses[i].x - poses[i - 1].x)
+                    times[i * 2] = times[i * 2 - 1] + 1 / desired_speed * np.sqrt((poses[i].y - poses[i - 1].y) ** 2 + (poses[i].x - poses[i - 1].x) ** 2)
+                else:
+                    new_poses[2,0] = poses[0].theta
+                    times[0] = t0
+                new_poses[0,i  * 2 + 1] = poses[i].x
+                new_poses[1,i * 2 + 1] = poses[i].y
+                if i < W - 1:
+                    new_poses[2,i  * 2 + 1] = np.arctan2(poses[i + 1].y - poses[i].y, poses[i + 1].x - poses[i].x)
+                    times[i  * 2 + 1] = times[i * 2] + 2 * 0.11 / (2 * desired_speed) * np.absolute(np.arctan2(np.sin(timed_poses[2,i  * 2 + 1] - timed_poses[2,i  * 2 ]),np.cos(timed_poses[2,i  * 2 + 1] - timed_poses[2,i  * 2 ])))
+                else:
+                    new_poses[2,i  * 2 + 1] = new_poses[2,i  * 2]
+                    times[i  * 2 + 1] = t0 + LargeTime     
+        
+        return new_poses, times
+
+
     def sample_points(self):
         sample_x, sample_y = [], []
 
