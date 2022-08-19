@@ -1,6 +1,3 @@
-import rclpy
-import math
-
 from rclpy.node import Node
 from sycabot_interfaces.msg import Motor
 from rcl_interfaces.msg import SetParametersResult
@@ -13,7 +10,9 @@ class MotorController(Node):
     """
     Abstract motor controller base node for supporting different JetBots.
     Can be extended to support any diff drive by overriding set_speed(),
-    or any node that subscribes to the /jetbot/cmd_vel Twist message.
+    or any node that subscribes to the /jetbot/cmd_vel Motor message.
+
+    This MotorController expects Vr, Vl command inputs.
     """
     def __init__(self):
         super().__init__('motors')
@@ -37,7 +36,7 @@ class MotorController(Node):
         
         self.add_on_set_parameters_callback(self.parameters_callback)
 
-        self.sub = self.create_subscription(Motor, f'/SycaBot_W{self.id}/cmd_vel', self.twist_listener, 10)
+        self.sub = self.create_subscription(Motor, f'/SycaBot_W{self.id}/cmd_vel', self.motor_listener, 10)
          
         self.last_x = -999
         self.last_rot = -999
@@ -76,7 +75,7 @@ class MotorController(Node):
     def stop(self):
         self.set_speed(0,0)
 
-    def twist_listener(self, msg):
+    def motor_listener(self, msg):
         self.get_logger().info("Got velocity command : right = %f left = %f"%(msg.right,msg.left))
         self.set_speed(msg.left, msg.right)
 

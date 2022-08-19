@@ -20,7 +20,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'cCAPT = sycabot_pathplanner.cCAPT:main'
+            'cCAPT = sycabot_pathplanner.cCAPT:main',
+            'PRM = sycabot_pathplanner.PRM:main',
         ],
     },
 )

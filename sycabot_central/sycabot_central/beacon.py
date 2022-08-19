@@ -1,4 +1,3 @@
-from argparse import Namespace
 import rclpy
 from rclpy.node import Node
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallbackGroup
@@ -8,11 +7,6 @@ from sycabot_interfaces.srv import BeaconSrv
 from std_srvs.srv import Trigger
 from rclpy.qos import qos_profile_sensor_data
 from rclpy.executors import MultiThreadedExecutor
-
-import numpy as np
-import math as m
-import time
-import sys
 
 class beacon(Node):
     '''

@@ -77,7 +77,7 @@ class PPCtrller(CtrllerActionServer):
 
         return idx
     
-    def get_path_x_y(self,path, interpolate):
+    def get_path_x_y(self, path, interpolate):
         path_x = [pose.x for pose in path]
         path_y = [pose.y for pose in path]
         if interpolate : path_x, path_y = self.interpolate_path(path_x,path_y)

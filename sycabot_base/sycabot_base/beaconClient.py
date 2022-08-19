@@ -10,6 +10,10 @@ verbose = True
 plot = True
 
 class beaconClient(Node):
+    '''
+    Node responsable for advertising the Sycabot id to the central PC
+    by publishing on the beacon topic.
+    '''
     def __init__(self):
         super().__init__('BeaconClient')
         qos = qos_profile_sensor_data
