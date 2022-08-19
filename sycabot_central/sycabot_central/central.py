@@ -50,7 +50,7 @@ class central(Node):
         '''
         Create the robot handlers for all the Sycabot present. 
         '''
-        pathplanner = 'cCAPT'
+        pathplanner = 'PRM'
         controller = 'MPC'
         for id in self.ids :
             self.handlers.append(BotHandler(id, controller, pathplanner))

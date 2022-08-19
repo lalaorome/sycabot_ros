@@ -8,10 +8,11 @@ from message_filters import ApproximateTimeSynchronizer, Subscriber
 from sycabot_utils.utilities import quat2eul
 
 import math
+import time
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.spatial import KDTree
-import PRM_Node
+from .PRM_Node import PRM_Node
 
 # import numpy as np
 # from numpy.linalg import norm
@@ -50,6 +51,7 @@ class PRM(Node):
 
         self.get_ids()
         self.initialise_pose_acquisition()
+        self.wait4pose()
         
         self.map_x_min = -1.5
         self.map_x_max = 1.5
@@ -63,7 +65,7 @@ class PRM(Node):
         self.N_samples = 1000
         self.N_KNN = 10
         self.MAX_EDGE_LEN = 2.0
-        self.plan_paths()
+        self.plan_path()
         
     def initialise_obstacles(self):
         ox = []
@@ -71,17 +73,17 @@ class PRM(Node):
         N_x = math.ceil((self.map_x_max - self.map_x_min) / self.robot_radius) + 1
         N_y = math.ceil((self.map_y_max - self.map_y_min) / self.robot_radius) + 1
         for i in range(N_x):
-            ox.append(self.x_min + i * (self.map_x_max - self.map_x_min) / (N_x - 1))
+            ox.append(self.map_x_min + i * (self.map_x_max - self.map_x_min) / (N_x - 1))
             oy.append(self.map_y_min)
         for i in range(N_y):
             ox.append(self.map_x_max)
-            oy.append(self.y_min + i * (self.map_y_max - self.map_y_min) / (N_y - 1))
+            oy.append(self.map_y_min + i * (self.map_y_max - self.map_y_min) / (N_y - 1))
         for i in range(N_x):
-            ox.append(self.x_min + i * (self.map_x_max - self.map_x_min) / (N_x - 1))
+            ox.append(self.map_x_min + i * (self.map_x_max - self.map_x_min) / (N_x - 1))
             oy.append(self.map_y_max)
         for i in range(N_y):
             ox.append(self.map_x_min)
-            oy.append(self.y_min + i * (self.map_y_max - self.map_y_min) / (N_y - 1))
+            oy.append(self.map_y_min + i * (self.map_y_max - self.map_y_min) / (N_y - 1))
         for i in range(math.floor(N_x * 2 / 3)):
             ox.append(self.map_x_min + i * (self.map_x_max - self.map_x_min) / (N_x - 1))
             oy.append(-2.0)
@@ -104,11 +106,12 @@ class PRM(Node):
                 gx = np.random.rand() * 3.0 - 1.5
                 gy = np.random.rand() * 7.0 - 3.5
 
-                dist, index = self.obstacle_kd_tree.query([gx, gy])
+                dist, index = self.obstacle_kd_tree.query([gx, gy], k=1)
                 if dist >= self.robot_radius:
                     destinations[rob,0] = gx
                     destinations[rob,1] = gy
-                    found_destinations = True
+                    found_destination = True
+        print('here finished init')
         self.destinations = destinations
         return 
 
@@ -129,17 +132,24 @@ class PRM(Node):
         
         tasks = []
         tfs = [] # Problem here should send angles and times
-        for p in range(self.path_length[idx]):
+        for p in range(int(self.path_length[idx])):
             task_p = Pose2D()
             task_p.x = self.x_path[idx,p]
             task_p.y = self.y_path[idx,p]
-            task_p.z = 0.
+            task_p.theta = 0.
             tasks.append(task_p)
 
         tasks_augmented, times = self.add_time_to_wayposes(tasks,0.,0.25,'ignore_corners')
 
-        response.tasks = tasks_augmented
-        response.tf = times
+        tasks = []
+        for i in range(tasks_augmented.shape[1]):
+            pose = Pose2D()
+            pose.x = tasks_augmented[0,i]
+            pose.y = tasks_augmented[1,i]
+            pose.theta = tasks_augmented[2,i]
+            tasks.append(pose)
+        response.tasks = tasks
+        response.tfs = times.tolist()
         return response
 
     def get_ids(self):
@@ -175,7 +185,7 @@ class PRM(Node):
         return
 
     def plan_path(self):
-        self.N_samples = 1000
+        self.N_samples = 500
         self.sample_points()
         self.generate_road_map()
         N = len(self.ids)
@@ -184,18 +194,17 @@ class PRM(Node):
         self.path_length = np.zeros(N)
         for rob in range(N):
             start_x = self.jb_positions[rob,0]
-            start_y = self.jb.positions[rob,1]
+            start_y = self.jb_positions[rob,1]
             goal_x = self.destinations[rob,0]
             goal_y = self.destinations[rob,1]
             rx, ry = self.dijkstra_planning(start_x, start_y, goal_x, goal_y)
             self.path_length[rob] = len(rx)
-            self.x_path[rob,:self.path_length[rob]] = rx
-            self.y_path[rob,:self.path_length[rob]] = ry
+            self.x_path[rob,:len(rx)] = rx
+            self.y_path[rob,:len(rx)] = ry
         return
     
     def add_time_to_wayposes(self, poses: list,t0,desired_speed: float,mode = 'ignore_corners'):
-        LargeTime = 1000
-        
+       
         W = len(poses)
         if mode == 'ignore_corners':
             new_poses = np.zeros((3,W))
@@ -203,7 +212,6 @@ class PRM(Node):
             for i in range(W):
                 new_poses[0,i] = poses[i].x
                 new_poses[1,i] = poses[i].y
-                # timed_poses[2,i] = poses[i].theta
                 if i > 0:
                     new_poses[2,i] = np.arctan2(poses[i].y - poses[i - 1].y, poses[i].x - poses[i - 1].x)
                     times[i] = times[i - 1] + 1 / desired_speed * np.sqrt((poses[i].y - poses[i - 1].y) ** 2 + (poses[i].x - poses[i - 1].x) ** 2)
@@ -226,10 +234,10 @@ class PRM(Node):
                 new_poses[1,i * 2 + 1] = poses[i].y
                 if i < W - 1:
                     new_poses[2,i  * 2 + 1] = np.arctan2(poses[i + 1].y - poses[i].y, poses[i + 1].x - poses[i].x)
-                    times[i  * 2 + 1] = times[i * 2] + 2 * 0.11 / (2 * desired_speed) * np.absolute(np.arctan2(np.sin(timed_poses[2,i  * 2 + 1] - timed_poses[2,i  * 2 ]),np.cos(timed_poses[2,i  * 2 + 1] - timed_poses[2,i  * 2 ])))
+                    times[i  * 2 + 1] = times[i * 2] + 2 * 0.11 / (2 * desired_speed) * np.absolute(np.arctan2(np.sin(new_poses[2,i  * 2 + 1] -new_poses[2,i  * 2 ]),np.cos(new_poses[2,i  * 2 + 1] -new_poses[2,i  * 2 ])))
                 else:
                     new_poses[2,i  * 2 + 1] = new_poses[2,i  * 2]
-                    times[i  * 2 + 1] = t0 + LargeTime     
+                    times[i  * 2 + 1] = times[i  * 2] + 2.     
         
         return new_poses, times
 
@@ -238,6 +246,7 @@ class PRM(Node):
         sample_x, sample_y = [], []
 
         while len(sample_x) <= self.N_samples:
+            print('here sample')
             tx = (np.random.rand() * (self.map_x_max - self.map_x_min)) + self.map_x_min
             ty = (np.random.rand() * (self.map_y_max - self.map_y_min)) + self.map_y_min
 
@@ -249,6 +258,7 @@ class PRM(Node):
         
         N = len(self.ids)
         for rob in range(N):
+            print(rob)
             sample_x.append(self.jb_positions[rob,0])
             sample_y.append(self.jb_positions[rob,1])
             sample_x.append(self.destinations[rob,0])
@@ -311,6 +321,7 @@ class PRM(Node):
 
 
     def dijkstra_planning(self,sx, sy, gx, gy):
+        print('here dijk 1')
         start_node = PRM_Node(sx, sy, 0.0, -1)
         goal_node = PRM_Node(gx, gy, 0.0, -1)
 
@@ -320,6 +331,7 @@ class PRM(Node):
         path_found = True
 
         while True:
+            print('here dijk')
             if not open_set:
                 print("Cannot find path")
                 path_found = False
@@ -345,7 +357,7 @@ class PRM(Node):
                 dx = self.sample_x[n_id] - current.x
                 dy = self.sample_y[n_id] - current.y
                 d = math.hypot(dx, dy)
-                node = Node(self.sample_x[n_id], self.sample_y[n_id],
+                node = PRM_Node(self.sample_x[n_id], self.sample_y[n_id],
                             current.cost + d, c_id)
 
                 if n_id in closed_set:
@@ -365,6 +377,7 @@ class PRM(Node):
         rx, ry = [goal_node.x], [goal_node.y]
         parent_index = goal_node.parent_index
         while parent_index != -1:
+            print('here dijk2')
             n = closed_set[parent_index]
             rx.append(n.x)
             ry.append(n.y)
@@ -404,6 +417,12 @@ class PRM(Node):
             self.jb_positions = np.append(self.jb_positions, np.array([[p.pose.position.x, p.pose.position.y, theta]]), axis=0)
     
         return       
+
+    def wait4pose(self):
+        while self.jb_positions is None :
+            time.sleep(0.1)
+            self.get_logger().info(f"Waiting for positions ...")
+            rclpy.spin_once(self, timeout_sec=0.1)
  
 
 def main(args=None):
